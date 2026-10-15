@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" fill="none">
+  <defs>
+    <linearGradient id="gold" x1="164" y1="182" x2="498" y2="524" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f0dfbc"/>
+      <stop offset=".38" stop-color="#c8aa77"/>
+      <stop offset=".72" stop-color="#8d7049"/>
+      <stop offset="1" stop-color="#d9c49d"/>
+    </linearGradient>
+    <linearGradient id="gem" x1="320" y1="184" x2="320" y2="293" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#594a35"/>
+      <stop offset="1" stop-color="#292720"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(320 350) rotate(90) scale(243)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#b99d71" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#b99d71" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="320" cy="350" r="243" fill="url(#glow)"/>
+  <circle cx="320" cy="390" r="149" stroke="#0f0e0d" stroke-opacity=".42" stroke-width="23"/>
+  <circle cx="320" cy="390" r="149" stroke="url(#gold)" stroke-width="15"/>
+  <path d="M193 455c24 50 72 82 127 84" stroke="#f0dfbc" stroke-opacity=".48" stroke-width="3" stroke-linecap="round"/>
+  <path d="M259 228 286 185h68l27 43-61 64-61-64Z" fill="url(#gem)" stroke="url(#gold)" stroke-width="7" stroke-linejoin="round"/>
+  <path d="m286 185-10 43 44 64 44-64-10-43M276 228h88M286 185l34 43 34-43" stroke="#e5d0a6" stroke-opacity=".72" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M306 199h28" stroke="#fff5db" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/>
+</svg>

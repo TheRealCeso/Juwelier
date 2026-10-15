@@ -1,0 +1,29 @@
+Locally bundled libraries for the Ankaufbeleg test area
+
+Tesseract.js 6.0.1 — Apache-2.0
+https://github.com/naptha/tesseract.js
+License: tesseract/LICENSE.md
+
+Tesseract.js Core 6.0.0 — Apache-2.0
+https://github.com/naptha/tesseract.js-core
+License: tesseract/core/LICENSE
+
+Tesseract fast German and English language data — Apache-2.0
+https://github.com/tesseract-ocr/tessdata_fast
+License: tesseract/lang/LICENSE
+
+PDF.js 6.4.299 — Apache-2.0
+https://github.com/mozilla/pdf.js
+License: pdfjs/LICENSE
+
+pdf-lib 1.17.1 — MIT
+https://github.com/Hopding/pdf-lib
+License: pdf-lib/LICENSE.md
+
+@pdf-lib/fontkit 1.1.1 — MIT
+https://github.com/Hopding/fontkit
+License: pdf-lib/FONTKIT-LICENSE.md
+
+Noto Sans Regular — SIL Open Font License 1.1
+https://github.com/notofonts/noto-fonts
+License: pdf-lib/NOTO-LICENSE

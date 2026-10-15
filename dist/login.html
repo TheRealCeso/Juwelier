@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="Geschützter Zugang von Juwelier Gök in Augsburg." />
+    <title>Login – Juwelier Gök Augsburg</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="script.js" defer></script>
+    <script src="login.js" defer></script>
+    <script src="translations.js" defer></script>
+    <script src="i18n.js" defer></script>
+  </head>
+  <body class="login-page">
+    <a class="skip-link" href="#main">Zum Inhalt springen</a>
+
+    <header class="site-header login-header">
+      <div class="header-inner login-header-inner shell">
+        <a class="brand" href="index.html" aria-label="Juwelier Gök – zur Startseite">
+          <span class="brand-icon" aria-hidden="true"><img src="assets/goek-logo-transparent.png" alt="" /></span>
+          <span class="brand-text"><strong>GÖK</strong><small>JUWELIER · AUGSBURG</small></span>
+        </a>
+        <a class="login-back" href="index.html">← Zur Website</a>
+        <div class="language-switcher">
+          <button class="language-trigger" type="button" aria-label="Sprache auswählen" aria-controls="language-menu" aria-expanded="false">
+            <svg class="language-globe" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"/></svg>
+            <span class="language-current">DE</span>
+            <svg class="language-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
+          </button>
+          <div class="language-menu" id="language-menu" role="menu" aria-label="Sprache auswählen" hidden>
+            <button type="button" role="menuitemradio" aria-checked="true" data-lang="de"><span class="language-code">DE</span><span>Deutsch</span><span class="language-check" aria-hidden="true">✓</span></button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-lang="en"><span class="language-code">EN</span><span lang="en">English</span><span class="language-check" aria-hidden="true">✓</span></button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-lang="tr"><span class="language-code">TR</span><span lang="tr">Türkçe</span><span class="language-check" aria-hidden="true">✓</span></button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class="login-layout">
+      <div class="login-visual">
+        <img src="assets/hero-jewelry.jpg" alt="Goldene Kette und Ringe auf dunklem Stein" />
+        <div class="login-visual-copy">
+          <p class="kicker">JUWELIER GÖK · AUGSBURG</p>
+          <h2 data-i18n-html="loginVisualTitle">Persönlich.<br /><em>Seit 1992.</em></h2>
+        </div>
+      </div>
+
+      <section class="login-panel" aria-labelledby="login-title">
+        <div class="login-panel-inner">
+          <p class="kicker">TESTBEREICH</p>
+          <h1 id="login-title" data-i18n-html="loginTitle">Willkommen<br /><em>zurück.</em></h1>
+          <p class="login-intro">Melden Sie sich an, um den neuen Ankaufbeleg zu testen.</p>
+          <form class="login-form" id="demo-login-form" autocomplete="off" aria-describedby="login-notice">
+            <div class="login-field">
+              <label for="login-name">Benutzername</label>
+              <input id="login-name" name="username" type="text" placeholder="Test" autocomplete="off" required />
+            </div>
+            <div class="login-field">
+              <label for="login-password">Passwort</label>
+              <input id="login-password" name="password" type="password" placeholder="Test" autocomplete="off" required />
+            </div>
+            <button class="button button-gold login-submit" type="submit">Anmelden <span aria-hidden="true">↗</span></button>
+          </form>
+          <p class="login-notice" id="login-notice"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v6m0-9v1"/></svg><span data-i18n-html="loginDemoNotice">Demo-Zugang: Benutzername <strong>Test</strong>, Passwort <strong>Test</strong>. Nur Testdaten verwenden.</span></p>
+          <p class="login-error" id="login-error" role="alert" hidden>Benutzername oder Passwort ist falsch.</p>
+          <p class="login-contact">Fragen zum Zugang? <a href="mailto:info@juwelier-goek.de">Kontaktieren Sie uns</a></p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="login-footer">
+      <span>© <span id="year">2026</span> Juwelier Gök</span>
+      <div><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a></div>
+    </footer>
+  </body>
+</html>
