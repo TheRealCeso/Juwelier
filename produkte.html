@@ -8,17 +8,17 @@
     <title>Produkte – Juwelier Gök Augsburg</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="script.js" defer></script>
+    <script src="button-touch.js" defer></script>
     <script src="translations.js" defer></script>
     <script src="i18n.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Zum Inhalt springen</a>
 
-    <header class="site-header" id="top">
+    <header class="site-header public-header" id="top">
       <div class="header-inner shell">
         <a class="brand" href="index.html" aria-label="Juwelier Gök – zur Startseite">
           <span class="brand-icon" aria-hidden="true"><img src="assets/goek-logo-transparent.png" alt="" /></span>
-          <span class="brand-text"><strong>GÖK</strong><small>JUWELIER · AUGSBURG</small></span>
         </a>
 
         <nav class="desktop-nav" aria-label="Hauptnavigation">
@@ -31,14 +31,14 @@
 
         <div class="language-switcher">
           <button class="language-trigger" type="button" aria-label="Sprache auswählen" aria-controls="language-menu" aria-expanded="false">
-            <svg class="language-globe" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"/></svg>
+            <img class="language-flag language-current-flag" src="assets/flag-de.svg" alt="" aria-hidden="true" />
             <span class="language-current">DE</span>
             <svg class="language-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
           </button>
           <div class="language-menu" id="language-menu" role="menu" aria-label="Sprache auswählen" hidden>
-            <button type="button" role="menuitemradio" aria-checked="true" data-lang="de"><span class="language-code">DE</span><span>Deutsch</span><span class="language-check" aria-hidden="true">✓</span></button>
-            <button type="button" role="menuitemradio" aria-checked="false" data-lang="en"><span class="language-code">EN</span><span lang="en">English</span><span class="language-check" aria-hidden="true">✓</span></button>
-            <button type="button" role="menuitemradio" aria-checked="false" data-lang="tr"><span class="language-code">TR</span><span lang="tr">Türkçe</span><span class="language-check" aria-hidden="true">✓</span></button>
+            <button type="button" role="menuitemradio" aria-checked="true" data-lang="de"><img class="language-flag" src="assets/flag-de.svg" alt="" aria-hidden="true" /><span class="language-code">DE</span><span>Deutsch</span><span class="language-check" aria-hidden="true">✓</span></button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-lang="en"><img class="language-flag" src="assets/flag-en.svg" alt="" aria-hidden="true" /><span class="language-code">EN</span><span lang="en">English</span><span class="language-check" aria-hidden="true">✓</span></button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-lang="tr"><img class="language-flag" src="assets/flag-tr.svg" alt="" aria-hidden="true" /><span class="language-code">TR</span><span lang="tr">Türkçe</span><span class="language-check" aria-hidden="true">✓</span></button>
           </div>
         </div>
 
@@ -61,12 +61,14 @@
           <p class="kicker">JUWELIER GÖK · SCHMUCKWELT</p>
           <h1 id="products-hero-title" data-i18n-html="productHeroTitle">Schmuck für<br /><em>jeden Moment.</em></h1>
           <p class="products-page-hero-lead">Von Ringen bis Colliers. Entdecken Sie, was zu Ihnen passt.</p>
-          <a class="text-link" href="#auswahl">Sortiment entdecken <span aria-hidden="true">→</span></a>
+          <a class="text-link" href="#auswahl">Sortiment entdecken <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></span></a>
         </div>
         <div class="products-page-hero-media">
           <img src="assets/schmuck-symbol.svg" alt="Stilisierter Ring als Symbol für unser Schmucksortiment" fetchpriority="high" />
         </div>
       </section>
+
+      <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
       <section class="product-showcase shell" id="auswahl" aria-labelledby="products-title">
         <div class="product-heading" data-reveal>
@@ -87,13 +89,17 @@
         <p class="product-note">Auswahl und Verfügbarkeit können vor Ort variieren. Wir beraten Sie gern persönlich.</p>
       </section>
 
+      <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
+
       <section class="products-visit" aria-labelledby="products-visit-title">
         <div class="products-visit-inner shell">
           <div data-reveal><p class="kicker">WIR FREUEN UNS AUF SIE</p><h2 id="products-visit-title" data-i18n-html="productsVisitTitle">Besuchen Sie<br /><em>uns in Augsburg.</em></h2></div>
-          <a class="button button-gold" href="index.html#standorte">Unsere Standorte <span aria-hidden="true">↗</span></a>
+          <a class="button button-gold" href="index.html#standorte">Unsere Standorte <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></a>
         </div>
       </section>
     </main>
+
+    <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
     <footer class="site-footer">
       <div class="footer-main shell">

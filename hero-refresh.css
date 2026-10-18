@@ -1,0 +1,173 @@
+/* Ruhiger Einstieg mit feinen, rein dekorativen Goldpartikeln. */
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: transparent;
+}
+
+.hero::before,
+.hero::after {
+  position: absolute;
+  z-index: -1;
+  inset: -20px;
+  content: '';
+  pointer-events: none;
+}
+
+.hero::before {
+  opacity: .67;
+  background-image:
+    radial-gradient(circle at 8% 25%, #cbb58e 0 1px, transparent 2px),
+    radial-gradient(circle at 14% 72%, #cbb58e 0 1px, transparent 2px),
+    radial-gradient(circle at 20% 45%, #cbb58e 0 .7px, transparent 1.7px),
+    radial-gradient(circle at 29% 14%, #cbb58e 0 1px, transparent 2px),
+    radial-gradient(circle at 33% 80%, #cbb58e 0 1px, transparent 2px),
+    radial-gradient(circle at 41% 30%, #cbb58e 0 .7px, transparent 1.7px),
+    radial-gradient(circle at 51% 9%, #cbb58e 0 1px, transparent 2px),
+    radial-gradient(circle at 60% 75%, #cbb58e 0 .7px, transparent 1.7px),
+    radial-gradient(circle at 68% 27%, #cbb58e 0 1px, transparent 2px),
+    radial-gradient(circle at 74% 88%, #cbb58e 0 1px, transparent 2px),
+    radial-gradient(circle at 82% 41%, #cbb58e 0 .7px, transparent 1.7px),
+    radial-gradient(circle at 91% 18%, #cbb58e 0 1px, transparent 2px),
+    radial-gradient(circle at 95% 70%, #cbb58e 0 .7px, transparent 1.7px);
+  animation: hero-dust-float 23s ease-in-out infinite alternate;
+}
+
+.hero::after {
+  opacity: .4;
+  background-image:
+    radial-gradient(circle at 5% 60%, #e5d4b5 0 .7px, transparent 1.7px),
+    radial-gradient(circle at 18% 11%, #e5d4b5 0 .7px, transparent 1.7px),
+    radial-gradient(circle at 24% 87%, #e5d4b5 0 1px, transparent 2px),
+    radial-gradient(circle at 37% 56%, #e5d4b5 0 .7px, transparent 1.7px),
+    radial-gradient(circle at 48% 90%, #e5d4b5 0 1px, transparent 2px),
+    radial-gradient(circle at 58% 19%, #e5d4b5 0 .7px, transparent 1.7px),
+    radial-gradient(circle at 71% 61%, #e5d4b5 0 1px, transparent 2px),
+    radial-gradient(circle at 79% 12%, #e5d4b5 0 .7px, transparent 1.7px),
+    radial-gradient(circle at 88% 82%, #e5d4b5 0 1px, transparent 2px);
+  animation: hero-dust-float 29s ease-in-out infinite alternate-reverse;
+}
+
+.hero .hero-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100% - 48px, 1200px);
+  min-height: clamp(570px, calc(100svh - 136px), 740px);
+  padding-block: 80px 96px;
+}
+
+.hero .hero-copy {
+  align-items: center;
+  width: 100%;
+  max-width: 850px;
+  padding: 0;
+  text-align: center;
+}
+
+.hero .eyebrow {
+  justify-content: center;
+  gap: 16px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.hero .eyebrow-line,
+.hero .eyebrow::after {
+  display: block;
+  width: 30px;
+  opacity: .75;
+}
+
+.hero h1 {
+  margin: 32px 0 0;
+  font-size: clamp(64px, 8.3vw, 112px);
+  line-height: 1.04;
+  letter-spacing: -.058em;
+}
+
+.hero .hero-copy > p {
+  max-width: 600px;
+  margin: 30px auto 0;
+  color: #d7d0c4;
+  font-size: clamp(15px, 1.35vw, 18px);
+  line-height: 1.65;
+}
+
+.hero .hero-actions {
+  justify-content: center;
+  margin-top: 34px;
+}
+
+.hero .button-gold {
+  min-width: 220px;
+  min-height: 56px;
+}
+
+@keyframes hero-dust-float {
+  from { transform: translate3d(-7px, 10px, 0); }
+  to { transform: translate3d(12px, -16px, 0); }
+}
+
+@media (max-width: 1024px) {
+  .hero .hero-inner {
+    min-height: clamp(570px, calc(100svh - 72px), 740px);
+  }
+}
+
+@media (max-width: 760px) {
+  .hero .hero-inner {
+    width: min(100% - 40px, 620px);
+    min-height: clamp(550px, calc(100svh - 72px), 690px);
+    padding-block: 68px 80px;
+  }
+
+  .hero h1 {
+    margin-top: 28px;
+    font-size: clamp(57px, 11vw, 82px);
+  }
+
+  .hero .hero-copy > p {
+    max-width: 440px;
+    margin-top: 27px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 430px) {
+  .hero .hero-inner {
+    width: min(100% - 36px, 390px);
+    min-height: clamp(540px, calc(100svh - 72px), 650px);
+  }
+
+  .hero .eyebrow {
+    gap: 9px;
+    font-size: 8px;
+    letter-spacing: .15em;
+  }
+
+  .hero .eyebrow-line,
+  .hero .eyebrow::after {
+    width: 20px;
+  }
+
+  .hero h1 {
+    font-size: clamp(49px, 12vw, 62px);
+  }
+
+  .hero .hero-copy > p {
+    font-size: 15px;
+  }
+
+  .hero .hero-actions {
+    margin-top: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero::before,
+  .hero::after {
+    animation: none;
+  }
+}

@@ -10,7 +10,8 @@ demoLoginForm?.addEventListener('submit', event => {
     // A local demo gate only. Never use this credential check to protect real records.
     sessionStorage.setItem('juwelier-goek-demo', '1');
     demoLoginForm.reset();
-    window.location.assign('ankauf.html');
+    const next = new URLSearchParams(window.location.search).get('next');
+    window.location.assign(next === 'belegarchiv.html' ? next : 'ankauf.html');
     return;
   }
 

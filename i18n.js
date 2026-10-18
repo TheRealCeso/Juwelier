@@ -3,6 +3,7 @@ const languageSwitcher = document.querySelector(".language-switcher");
 const languageTrigger = languageSwitcher?.querySelector(".language-trigger");
 const languageMenu = languageSwitcher?.querySelector(".language-menu");
 const languageCurrent = languageSwitcher?.querySelector(".language-current");
+const languageCurrentFlag = languageSwitcher?.querySelector(".language-current-flag");
 const languageOptions = [...(languageMenu?.querySelectorAll("[data-lang]") ?? [])];
 const translatedBlocks = [...document.querySelectorAll("[data-i18n-html]")].map(element => ({
   element,
@@ -52,6 +53,7 @@ function applyLanguage(language, rememberChoice = false) {
     element.innerHTML = activeLanguage === "de" ? original : UI_TRANSLATIONS.html[key][index];
   }
   if (languageCurrent) languageCurrent.textContent = activeLanguage.toUpperCase();
+  if (languageCurrentFlag) languageCurrentFlag.src = `assets/flag-${activeLanguage}.svg`;
   for (const option of languageOptions) {
     option.setAttribute("aria-checked", String(option.dataset.lang === activeLanguage));
   }

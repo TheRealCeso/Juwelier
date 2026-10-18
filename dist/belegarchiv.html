@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Ankaufbeleg Archiv · Testbereich – Juwelier Gök</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script>if (sessionStorage.getItem('juwelier-goek-demo') !== '1') location.replace('login.html?next=belegarchiv.html');</script>
+    <script src="archive-local.js" defer></script>
+    <script src="belegarchiv.js" defer></script>
+    <script src="button-touch.js" defer></script>
+  </head>
+  <body class="purchase-page archive-page">
+    <a class="skip-link" href="#main">Zum Inhalt springen</a>
+    <header class="purchase-header">
+      <div class="purchase-header-inner shell">
+        <a class="brand" href="index.html" aria-label="Juwelier Gök – zur Startseite">
+          <span class="brand-icon" aria-hidden="true"><img src="assets/goek-logo-transparent.png" alt="" /></span>
+        </a>
+        <nav class="purchase-nav" aria-label="Ankaufbelege">
+          <a href="ankauf.html">Neuer Ankaufbeleg</a>
+          <a href="belegarchiv.html" aria-current="page">Ankaufbeleg Archiv</a>
+        </nav>
+        <button type="button" class="purchase-logout" id="logout-button">Abmelden <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></button>
+      </div>
+    </header>
+
+    <main id="main" class="purchase-main archive-main shell">
+      <div class="purchase-intro">
+        <div>
+          <p class="kicker">JUWELIER GÖK · GOLDANKAUF</p>
+          <h1 id="archive-title">Belegarchiv<span>.</span></h1>
+          <p>Gespeicherte Belege suchen, ansehen und als PDF herunterladen.</p>
+        </div>
+        <a class="purchase-demo-button archive-new-link" href="ankauf.html">Neuen Beleg erstellen <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></a>
+      </div>
+
+      <div class="purchase-alert" role="note">
+        <strong>TESTARCHIV</strong>
+        <span>Die Belege sind verschlüsselt und liegen nur in diesem Browser. Ohne Archiv-Passwort oder nach dem Löschen der Browserdaten können sie nicht wiederhergestellt werden.</span>
+      </div>
+
+      <section class="purchase-section archive-page-panel" aria-labelledby="archive-section-title">
+        <div class="purchase-section-head"><span class="purchase-step">01</span><div><p class="kicker">BELEGARCHIV</p><h2 id="archive-section-title">Archiv öffnen</h2></div></div>
+        <div class="purchase-section-body archive-panel-body">
+          <form id="archive-unlock-form">
+            <div class="purchase-field"><label for="archive-password">Archiv-Passwort</label><input id="archive-password" type="password" autocomplete="off" required /></div>
+            <div class="purchase-field" id="archive-confirm-wrap" hidden><label for="archive-confirm">Passwort wiederholen</label><input id="archive-confirm" type="password" autocomplete="off" /></div>
+            <div class="dialog-actions"><button type="submit" class="purchase-primary" id="archive-unlock-button">Archiv entsperren</button></div>
+          </form>
+          <div id="archive-browser" hidden>
+            <div class="purchase-field"><label for="archive-search">Belege suchen</label><input id="archive-search" type="search" placeholder="Name, Nummer oder Datum" autocomplete="off" /></div>
+            <div class="archive-list" id="archive-list"></div>
+            <div class="dialog-actions"><button type="button" class="purchase-secondary" id="archive-lock-button">Archiv sperren</button></div>
+          </div>
+          <p class="purchase-status" id="archive-status" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="purchase-footer shell"><span>Juwelier Gök · Testbereich</span><div><a href="index.html">Zur Website</a><a href="datenschutz.html">Datenschutz</a></div></footer>
+
+    <dialog class="purchase-dialog pdf-preview-dialog" id="archive-preview-dialog" aria-labelledby="archive-preview-title"><div class="dialog-head"><div><p class="kicker">ARCHIVIERTER BELEG</p><h2 id="archive-preview-title">PDF-Vorschau</h2></div><button type="button" class="dialog-close" id="archive-preview-close" aria-label="Vorschau schließen">×</button></div><p id="archive-preview-label"></p><iframe id="archive-preview-frame" title="Archivierter Ankaufbeleg als PDF"></iframe></dialog>
+  </body>
+</html>

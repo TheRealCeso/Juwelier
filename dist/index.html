@@ -7,7 +7,9 @@
     <meta name="description" content="Juwelier Gök – Ihr familiengeführter Juwelier in Augsburg. Entdecken Sie Goldschmuck und Trauringe an der Hermanstraße 11 und am Ulrichsplatz 7." />
     <title>Juwelier Gök – Schmuck mit Bedeutung in Augsburg</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="hero-refresh.css" />
     <script src="script.js" defer></script>
+    <script src="button-touch.js" defer></script>
     <script src="translations.js" defer></script>
     <script src="i18n.js" defer></script>
     <script src="metal-prices.js" defer></script>
@@ -15,11 +17,10 @@
   <body>
     <a class="skip-link" href="#main">Zum Inhalt springen</a>
 
-    <header class="site-header" id="top">
+    <header class="site-header public-header" id="top">
       <div class="header-inner shell">
         <a class="brand" href="#top" aria-label="Juwelier Gök – zur Startseite">
           <span class="brand-icon" aria-hidden="true"><img src="assets/goek-logo-transparent.png" alt="" /></span>
-          <span class="brand-text"><strong>GÖK</strong><small>JUWELIER · AUGSBURG</small></span>
         </a>
 
         <nav class="desktop-nav" aria-label="Hauptnavigation">
@@ -32,14 +33,14 @@
 
         <div class="language-switcher">
           <button class="language-trigger" type="button" aria-label="Sprache auswählen" aria-controls="language-menu" aria-expanded="false">
-            <svg class="language-globe" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"/></svg>
+            <img class="language-flag language-current-flag" src="assets/flag-de.svg" alt="" aria-hidden="true" />
             <span class="language-current">DE</span>
             <svg class="language-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
           </button>
           <div class="language-menu" id="language-menu" role="menu" aria-label="Sprache auswählen" hidden>
-            <button type="button" role="menuitemradio" aria-checked="true" data-lang="de"><span class="language-code">DE</span><span>Deutsch</span><span class="language-check" aria-hidden="true">✓</span></button>
-            <button type="button" role="menuitemradio" aria-checked="false" data-lang="en"><span class="language-code">EN</span><span lang="en">English</span><span class="language-check" aria-hidden="true">✓</span></button>
-            <button type="button" role="menuitemradio" aria-checked="false" data-lang="tr"><span class="language-code">TR</span><span lang="tr">Türkçe</span><span class="language-check" aria-hidden="true">✓</span></button>
+            <button type="button" role="menuitemradio" aria-checked="true" data-lang="de"><img class="language-flag" src="assets/flag-de.svg" alt="" aria-hidden="true" /><span class="language-code">DE</span><span>Deutsch</span><span class="language-check" aria-hidden="true">✓</span></button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-lang="en"><img class="language-flag" src="assets/flag-en.svg" alt="" aria-hidden="true" /><span class="language-code">EN</span><span lang="en">English</span><span class="language-check" aria-hidden="true">✓</span></button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-lang="tr"><img class="language-flag" src="assets/flag-tr.svg" alt="" aria-hidden="true" /><span class="language-code">TR</span><span lang="tr">Türkçe</span><span class="language-check" aria-hidden="true">✓</span></button>
           </div>
         </div>
 
@@ -64,14 +65,13 @@
             <h1 id="hero-title" data-i18n-html="homeHeroTitle">Schmuck mit<br /><em>Bedeutung.</em></h1>
             <p>Ausgewählter Schmuck und persönliche Beratung. Familiengeführt seit 1992 in Augsburg.</p>
             <div class="hero-actions">
-              <a class="button button-gold" href="produkte.html">Schmuck entdecken <span aria-hidden="true">↗</span></a>
+              <a class="button button-gold" href="produkte.html">Schmuck entdecken <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></a>
             </div>
-          </div>
-          <div class="hero-image-wrap">
-            <img class="hero-image" src="assets/hero-rings-modern.png" alt="Zwei Goldringe mit handgearbeiteter Oberfläche" fetchpriority="high" />
           </div>
         </div>
       </section>
+
+      <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
       <section class="collections section shell" id="schmuck" aria-labelledby="collections-title">
         <div class="section-heading" data-reveal>
@@ -79,22 +79,23 @@
             <p class="kicker">UNSERE WELT</p>
             <h2 id="collections-title" data-i18n-html="collectionsTitle">Entdecken Sie <em>Ihre</em> Favoriten.</h2>
           </div>
-          <a class="text-link" href="produkte.html">Zur Produktseite <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href="produkte.html">Zur Produktseite <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></a>
         </div>
         <div class="collection-grid">
           <a class="collection-card" href="produkte.html" data-reveal>
             <div class="collection-image"><img src="assets/goldschmuck.jpg" alt="Goldener Armreif und Kette auf dunklem Stein" loading="lazy" /></div>
-            <div class="collection-card-info"><h3>Goldschmuck</h3><span aria-hidden="true">↗</span></div>
+            <div class="collection-card-info"><h3>Goldschmuck</h3><span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></div>
             <span class="collection-card-action">Produkte ansehen</span>
           </a>
           <a class="collection-card" href="#standorte" data-reveal data-reveal-delay="1">
             <div class="collection-image"><img src="assets/trauringe.jpg" alt="Zwei goldene Trauringe auf hellem Stein" loading="lazy" /></div>
-            <div class="collection-card-info"><h3>Trauringe</h3><span aria-hidden="true">↗</span></div>
+            <div class="collection-card-info"><h3>Trauringe</h3><span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></div>
             <span class="collection-card-action">Beratung vor Ort</span>
           </a>
         </div>
-        <p class="image-note">Die Bildmotive zeigen beispielhafte Schmuckstücke. Das Sortiment entdecken Sie vor Ort.</p>
       </section>
+
+      <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
       <section class="story section" id="geschichte" aria-labelledby="story-title">
         <div class="story-inner shell">
@@ -104,10 +105,12 @@
           </div>
           <div class="story-detail" data-reveal data-reveal-delay="1">
             <p>Wir nehmen uns Zeit für Ihre Wünsche und finden gemeinsam das Stück, das sich richtig anfühlt.</p>
-            <a class="text-link" href="#standorte">Besuchen Sie uns <span aria-hidden="true">→</span></a>
+            <a class="text-link" href="#standorte">Besuchen Sie uns <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></span></a>
           </div>
         </div>
       </section>
+
+      <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
       <section class="services section shell" id="leistungen" aria-labelledby="services-title">
         <div class="services-header" data-reveal>
@@ -119,6 +122,8 @@
           <div class="service-card" data-reveal data-reveal-delay="2"><span>03</span><h3>Goldankauf und Goldverkauf</h3></div>
         </div>
       </section>
+
+      <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
       <section class="metal-prices section" id="edelmetallkurse" aria-labelledby="metal-prices-title">
         <div class="shell">
@@ -140,17 +145,23 @@
               <time id="silver-price-time" class="metal-price-time"></time>
             </article>
           </div>
-          <div class="metal-prices-actions">
-            <p id="metal-prices-status" role="status" aria-live="polite">Kursdaten auf Wunsch laden.</p>
-            <button class="metal-prices-button" id="metal-prices-load" type="button">Kurse laden <span aria-hidden="true">↗</span></button>
-          </div>
-          <p class="metal-prices-consent">Mit Klick auf „Kurse laden“ stimmen Sie dem Abruf zu. Dabei werden Ihre IP-Adresse und technische Verbindungsdaten an Gold API und Frankfurter übermittelt. <a href="datenschutz.html#privacy-prices">Datenschutz</a></p>
-          <div class="metal-prices-footnote">
-            <p>Spot-Richtwerte, keine An- oder Verkaufspreise. Der Preis vor Ort kann abweichen.</p>
-            <p>Quellen: <a href="https://gold-api.com/docs" target="_blank" rel="noopener noreferrer">Gold API</a> · <a href="https://frankfurter.dev/" target="_blank" rel="noopener noreferrer">Frankfurter</a><span id="metal-fx-date"></span></p>
+          <div class="metal-prices-detail">
+            <div class="metal-prices-actions">
+              <div class="metal-prices-action-copy">
+                <p id="metal-prices-status" role="status" aria-live="polite">Kursdaten auf Wunsch laden.</p>
+                <p class="metal-prices-consent">Mit Klick auf „Kurse laden“ stimmen Sie dem Abruf zu. Dabei werden Ihre IP-Adresse und technische Verbindungsdaten an Gold API und Frankfurter übermittelt. <a href="datenschutz.html#privacy-prices">Datenschutz</a></p>
+              </div>
+              <button class="metal-prices-button" id="metal-prices-load" type="button">Kurse laden <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></button>
+            </div>
+            <div class="metal-prices-footnote">
+              <p>Spot-Richtwerte, keine An- oder Verkaufspreise. Der Preis vor Ort kann abweichen.</p>
+              <p>Quellen: <a href="https://gold-api.com/docs" target="_blank" rel="noopener noreferrer">Gold API</a> · <a href="https://frankfurter.dev/" target="_blank" rel="noopener noreferrer">Frankfurter</a><span id="metal-fx-date"></span></p>
+            </div>
           </div>
         </div>
       </section>
+
+      <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
       <section class="reviews section" id="bewertungen" aria-labelledby="reviews-title">
         <div class="shell">
@@ -219,8 +230,11 @@
         </div>
         <div class="reviews-toolbar shell">
           <button class="review-motion-toggle" type="button" aria-label="Bewegung pausieren" hidden><span class="review-motion-label">Pausieren</span><span class="review-motion-icon" aria-hidden="true"></span></button>
+          <a class="google-reviews-link" href="https://www.google.com/maps/search/?api=1&amp;query=Juwelier+G%C3%B6k+-+Augsburg&amp;query_place_id=ChIJyTXv4VK9nkcRbpnMUFmSfts" target="_blank" rel="noopener noreferrer" aria-label="Google Bewertungen in neuem Tab öffnen">Google Bewertungen <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></a>
         </div>
       </section>
+
+      <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
       <section class="locations section" id="standorte" aria-labelledby="locations-title">
         <div class="locations-inner shell">
@@ -236,8 +250,8 @@
               <h3>Hermanstraße 11</h3>
               <p>86150 Augsburg</p>
               <div class="location-actions">
-                <a href="https://www.google.com/maps/search/?api=1&query=Hermanstra%C3%9Fe+11%2C+86150+Augsburg" target="_blank" rel="noopener noreferrer">Route ansehen <span aria-hidden="true">↗</span></a>
-                <a href="tel:+49821314670">0821 314670 <span aria-hidden="true">↗</span></a>
+                <a href="https://www.google.com/maps/search/?api=1&query=Hermanstra%C3%9Fe+11%2C+86150+Augsburg" target="_blank" rel="noopener noreferrer">Route ansehen <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></a>
+                <a href="tel:+49821314670">0821 314670 <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></a>
               </div>
             </article>
             <article class="location-card" data-reveal data-reveal-delay="1">
@@ -245,14 +259,16 @@
               <h3>Ulrichsplatz 7</h3>
               <p>86150 Augsburg</p>
               <div class="location-actions">
-                <a href="https://www.google.com/maps/search/?api=1&query=Ulrichsplatz+7%2C+86150+Augsburg" target="_blank" rel="noopener noreferrer">Route ansehen <span aria-hidden="true">↗</span></a>
-                <a href="mailto:info@juwelier-goek.de">Kontakt aufnehmen <span aria-hidden="true">↗</span></a>
+                <a href="https://www.google.com/maps/search/?api=1&query=Ulrichsplatz+7%2C+86150+Augsburg" target="_blank" rel="noopener noreferrer">Route ansehen <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></a>
+                <a href="mailto:info@juwelier-goek.de">Kontakt aufnehmen <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></a>
               </div>
             </article>
           </div>
         </div>
       </section>
     </main>
+
+    <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
     <footer class="site-footer">
       <div class="footer-main shell">

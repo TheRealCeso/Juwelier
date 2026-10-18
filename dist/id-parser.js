@@ -4,7 +4,7 @@
     last: /^(?:familienname|nachname|name|surname|nom)\b(?:\s*[/|]\s*(?:surname|nom|name))*\b/i,
     first: /^(?:vornamen?|given\s*names?|pr[eé]noms?)\b(?:\s*[/|]\s*(?:given\s*names?|pr[eé]noms?|vornamen?))*\b/i,
     birth: /^(?:geburtstag|geburtsdatum|date\s*(?:of\s*)?birth|date\s*de\s*naissance)\b(?:\s*[/|]\s*(?:date\s*(?:of\s*)?birth|date\s*de\s*naissance))*\b/i,
-    birthplace: /^(?:geburtsort|place\s*of\s*birth|lieu\s*de\s*naissance)\b/i,
+    birthplace: /^(?:geburts[oa]rt|place\s*of\s*birth|lieu\s*de\s*naissance)\b(?:\s*[/|]\s*(?:(?:place\s*)?of\s*birth|lieu\s*de\s*naissance))*\b/i,
     street: /^(?:anschrift|adresse|address|wohnort)\b(?:\s*[/|]\s*(?:address|adresse))*\b/i,
     nationality: /^(?:staatsangeh[oö]rigkeit|nationality|nationalit[eé])\b(?:\s*[/|]\s*(?:nationality|nationalit[eé]))*\b/i,
     number: /^(?:ausweis(?:nummer|nr\.?|\s*nr\.?|\s*no\.?|\s*number)?|dokument(?:nummer|nr\.?|\s*nr\.?)|document\s*(?:no\.?|number)|passport\s*(?:no\.?|number))\b/i,
@@ -77,13 +77,27 @@
     return /^\d$/.test(numericMrz(digit)) && checkDigit(value) === Number(numericMrz(digit));
   }
 
-  function mrzDate(value, expiry) {
+  function mrzExpiryDate(value) {
     const digits = numericMrz(value);
     if (!/^\d{6}$/.test(digits)) return '';
-    const year = Number(digits.slice(0, 2));
-    const current = new Date().getFullYear() % 100;
-    const fullYear = (expiry || year <= current ? 2000 : 1900) + year;
+    const fullYear = 2000 + Number(digits.slice(0, 2));
     return dateFromText(`${digits.slice(4, 6)}.${digits.slice(2, 4)}.${fullYear}`);
+  }
+
+  function mrzBirthDate(value) {
+    const digits = numericMrz(value);
+    if (!/^\d{6}$/.test(digits)) return { valid: false, date: '', ambiguous: false };
+    const year = Number(digits.slice(0, 2));
+    const day = digits.slice(4, 6), month = digits.slice(2, 4);
+    const today = new Date();
+    const dates = [1900 + year, 2000 + year]
+      .map(fullYear => dateFromText(`${day}.${month}.${fullYear}`))
+      .filter(date => {
+        if (!date) return false;
+        const [d, m, y] = date.split('.').map(Number);
+        return Date.UTC(y, m - 1, d) <= Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+      });
+    return { valid: dates.length > 0, date: dates.length === 1 ? dates[0] : '', ambiguous: dates.length > 1 };
   }
 
   function mrzNames(value) {
@@ -92,19 +106,41 @@
   }
 
   function mrzLines(text) {
-    return String(text || '').split(/\r?\n/).map(line => line.toUpperCase().replace(/[«‹]/g, '<').replace(/[^A-Z0-9<]/g, ''));
+    return String(text || '').split(/\r?\n/).map(line => line.toUpperCase().replace(/[«‹]/g, '<').replace(/[^A-Z0-9<]/g, '')
+      // Tesseract occasionally reads the initial I of an ID card as 1.
+      .replace(/^1(?=<|[A-Z]{2}<)/, 'I'));
+  }
+
+  function normalizedMrzLine(line, expected, trailingCheck = false) {
+    if (line.length === expected) return line;
+    // OCR frequently loses or duplicates filler characters at the end of a line.
+    // Only repair that filler area; never invent characters in checked fields.
+    if (Math.abs(line.length - expected) > 3) return '';
+    const check = trailingCheck ? line.slice(-1) : '';
+    const body = trailingCheck ? line.slice(0, -1) : line;
+    const target = expected - (trailingCheck ? 1 : 0);
+    if (trailingCheck && !/^[0-9OQDISBL]$/.test(check)) return '';
+    if (body.length < target && body.endsWith('<')) return `${body.padEnd(target, '<')}${check}`;
+    if (body.length > target && /^<+$/.test(body.slice(target))) return `${body.slice(0, target)}${check}`;
+    return '';
   }
 
   function inspectMrz(text) {
     const lines = mrzLines(text);
     let candidateSeen = false;
     let best = null;
-    const accept = (type, checks, fields) => {
+    const accept = (type, checks, fields, ambiguousBirthCentury = false) => {
       const validCount = Object.values(checks).filter(Boolean).length;
       const status = {
         state: validCount === 3 ? 'valid' : 'invalid', type, checks,
-        issues: Object.entries(checks).filter(([, valid]) => !valid).map(([key]) => `mrz-check-${key}`),
-        message: validCount === 3 ? 'MRZ-Prüfziffern gültig.' : 'Eine oder mehrere MRZ-Prüfziffern stimmen nicht.'
+        ambiguousBirthCentury,
+        issues: [
+          ...Object.entries(checks).filter(([, valid]) => !valid).map(([key]) => `mrz-check-${key}`),
+          ...(ambiguousBirthCentury ? ['mrz-birth-century-ambiguous'] : [])
+        ],
+        message: validCount === 3
+          ? ambiguousBirthCentury ? 'MRZ-Prüfziffern gültig; das Jahrhundert des Geburtsjahres muss am Original geprüft werden.' : 'MRZ-Prüfziffern gültig.'
+          : 'Eine oder mehrere MRZ-Prüfziffern stimmen nicht.'
       };
       const result = { fields: validCount >= 2 ? fields : {}, status, validCount };
       if (!best || result.validCount > best.validCount) best = result;
@@ -115,26 +151,28 @@
       const top = lines[index];
       if (!/^[IAC](?:<|[A-Z]{2}<)/.test(top)) continue;
       candidateSeen = true;
-      const middle = lines[index + 1] || '', bottom = lines[index + 2] || '';
-      if (top.length !== 30 || middle.length !== 30 || bottom.length !== 30 || !bottom.includes('<<')) continue;
+      const normalizedTop = normalizedMrzLine(top, 30);
+      const middle = normalizedMrzLine(lines[index + 1] || '', 30, true);
+      const bottom = normalizedMrzLine(lines[index + 2] || '', 30);
+      if (!normalizedTop || !middle || !bottom || !bottom.includes('<<')) continue;
       const fields = mrzNames(bottom);
       // Auf deutschen Ausweisen sind O und I in der Dokumentnummer unzulässig; OCR verwechselt sie oft mit 0 und 1.
-      const germanId = top.startsWith('IDD');
-      const doc = germanId ? top.slice(5, 14).replace(/[OQ]/g, '0').replace(/I/g, '1') : top.slice(5, 14);
+      const germanId = normalizedTop.startsWith('IDD');
+      const doc = germanId ? normalizedTop.slice(5, 14).replace(/[OQ]/g, '0').replace(/I/g, '1') : normalizedTop.slice(5, 14);
       const birth = numericMrz(middle.slice(0, 6));
       const expiry = numericMrz(middle.slice(8, 14));
-      const birthDate = mrzDate(birth, false);
-      const expiryDate = mrzDate(expiry, true);
+      const birthDate = mrzBirthDate(birth);
+      const expiryDate = mrzExpiryDate(expiry);
       const checks = {
-        document: !!doc.replace(/<+$/, '') && checked(doc, top[14]),
-        birth: !!birthDate && checked(birth, middle[6]),
+        document: !!doc.replace(/<+$/, '') && checked(doc, normalizedTop[14]),
+        birth: birthDate.valid && checked(birth, middle[6]),
         expiry: !!expiryDate && checked(expiry, middle[14])
       };
       if (checks.document) fields.number = doc.replace(/<+$/, '');
-      if (checks.birth) fields.birth = birthDate;
+      if (checks.birth && birthDate.date) fields.birth = birthDate.date;
       if (checks.expiry) fields.expiry = expiryDate;
       fields.nationality = germanId ? 'DEU' : middle.slice(15, 18).replace(/</g, '');
-      accept('TD1', checks, fields);
+      accept('TD1', checks, fields, checks.birth && birthDate.ambiguous);
       if (best?.status.state === 'valid') return best;
     }
 
@@ -143,24 +181,25 @@
       const top = lines[index];
       if (!/^P</.test(top)) continue;
       candidateSeen = true;
-      const bottom = lines[index + 1] || '';
-      if (top.length !== 44 || bottom.length !== 44 || !top.includes('<<')) continue;
-      const fields = mrzNames(top.slice(5));
+      const normalizedTop = normalizedMrzLine(top, 44);
+      const bottom = normalizedMrzLine(lines[index + 1] || '', 44, true);
+      if (!normalizedTop || !bottom || !normalizedTop.includes('<<')) continue;
+      const fields = mrzNames(normalizedTop.slice(5));
       const doc = bottom.slice(0, 9);
       const birth = numericMrz(bottom.slice(13, 19));
       const expiry = numericMrz(bottom.slice(21, 27));
-      const birthDate = mrzDate(birth, false);
-      const expiryDate = mrzDate(expiry, true);
+      const birthDate = mrzBirthDate(birth);
+      const expiryDate = mrzExpiryDate(expiry);
       const checks = {
         document: !!doc.replace(/<+$/, '') && checked(doc, bottom[9]),
-        birth: !!birthDate && checked(birth, bottom[19]),
+        birth: birthDate.valid && checked(birth, bottom[19]),
         expiry: !!expiryDate && checked(expiry, bottom[27])
       };
       if (checks.document) fields.number = doc.replace(/<+$/, '');
-      if (checks.birth) fields.birth = birthDate;
+      if (checks.birth && birthDate.date) fields.birth = birthDate.date;
       if (checks.expiry) fields.expiry = expiryDate;
       fields.nationality = bottom.slice(10, 13).replace(/</g, '');
-      accept('TD3', checks, fields);
+      accept('TD3', checks, fields, checks.birth && birthDate.ambiguous);
       if (best?.status.state === 'valid') return best;
     }
     if (best) return best;
@@ -168,6 +207,7 @@
       fields: {},
       status: {
         state: candidateSeen ? 'invalid' : 'missing', type: null,
+        ambiguousBirthCentury: false,
         checks: { document: null, birth: null, expiry: null },
         issues: [candidateSeen ? 'mrz-incomplete' : 'mrz-missing'],
         message: candidateSeen ? 'MRZ-Zeilen sind unvollständig oder nicht lesbar.' : 'MRZ fehlt oder wurde nicht erkannt.'
@@ -209,6 +249,15 @@
     return year * 10000 + month * 100 + day;
   }
 
+  function visualMentionsName(text, name) {
+    if (!name) return false;
+    const tokens = name.toUpperCase().split(/\s+/).filter(token => token.length >= 3);
+    if (!tokens.length) return false;
+    return String(text || '').split(/\r?\n/)
+      .filter(line => !looksLikeMrz(line))
+      .some(line => tokens.every(token => line.toUpperCase().includes(token)));
+  }
+
   function visualFields(text, side) {
     const lines = String(text || '').split(/\r?\n/).map(clean).filter(Boolean);
     const result = {};
@@ -247,6 +296,8 @@
         result.postal = match[1];
         const city = clean(match[2]);
         result.city = /^[A-ZÄÖÜẞ\s-]+\b/.test(city) ? (city.match(/^[A-ZÄÖÜẞ-]+(?:\s+[A-ZÄÖÜẞ-]+)*/)?.[0] || city) : city;
+        // Kurze Restzeichen am Ende einer OCR-Zeile stammen häufig von Mustern/Überdruck.
+        result.city = result.city.replace(/\s+[A-ZÄÖÜẞ]{1,2}$/, '');
       }
     }
     const streetLabel = lines.findIndex(line => labels.street.test(line));
@@ -269,13 +320,18 @@
     const back = visualFields(backText, 'back');
     const mrzResult = inspectMrz(`${backText}\n${frontText}`);
     const mrz = mrzResult.fields;
+    const trustedMrz = mrzResult.status.state === 'valid';
+    const frontMentionsMrzFirst = trustedMrz && visualMentionsName(frontText, mrz.first);
+    const frontMentionsMrzLast = trustedMrz && visualMentionsName(frontText, mrz.last);
     const conflicts = [];
     if (front.number && mrz.number && front.number !== mrz.number) conflicts.push('Dokumentnummer');
     if (front.expiry && mrz.expiry && front.expiry !== mrz.expiry) conflicts.push('Gültigkeitsdatum');
     if (front.birth && mrz.birth && front.birth !== mrz.birth) conflicts.push('Geburtsdatum');
+    if (trustedMrz && front.first?.length >= 3 && mrz.first && front.first !== mrz.first && !frontMentionsMrzFirst) conflicts.push('Vorname');
+    if (trustedMrz && front.last?.length >= 3 && mrz.last && front.last !== mrz.last && !frontMentionsMrzLast) conflicts.push('Nachname');
     const fields = {
-      first: front.first || mrz.first || back.first || '',
-      last: front.last || mrz.last || back.last || '',
+      first: frontMentionsMrzFirst ? mrz.first : front.first || mrz.first || back.first || '',
+      last: frontMentionsMrzLast ? mrz.last : front.last || mrz.last || back.last || '',
       birth: front.birth || mrz.birth || back.birth || '',
       birthplace: front.birthplace || back.birthplace || '',
       street: back.street || front.street || '',
@@ -290,7 +346,8 @@
       const source = front[key] ? 'front' : mrz[key] ? 'mrz' : back[key] ? 'back' : 'none';
       const compared = front[key] && mrz[key] && String(front[key]).toUpperCase() === String(mrz[key]).toUpperCase();
       const checksumKey = key === 'number' ? 'document' : key === 'birth' ? 'birth' : key === 'expiry' ? 'expiry' : null;
-      const high = compared && (checksumKey ? mrzResult.status.checks[checksumKey] : mrzResult.status.state === 'valid');
+      const high = compared && !(key === 'birth' && mrzResult.status.ambiguousBirthCentury) &&
+        (checksumKey ? mrzResult.status.checks[checksumKey] : mrzResult.status.state === 'valid');
       fieldStatus[key] = { source, confidence: !value ? 'missing' : high ? 'high' : 'review' };
     }
     return { fields, conflicts, front, back, mrz, mrzStatus: mrzResult.status, fieldStatus };

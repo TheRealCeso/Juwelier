@@ -9,6 +9,10 @@ const reviewWarning = byId('review-warning');
 const exportStatus = byId('export-status');
 const cameraDialog = byId('camera-dialog');
 const cameraVideo = byId('camera-video');
+const cameraStage = byId('camera-stage');
+const cameraReviewImage = byId('camera-review-image');
+const cameraReviewStatus = byId('camera-review-status');
+const cameraRetake = byId('camera-retake');
 const signatureDialog = byId('signature-dialog');
 const signatureCanvas = byId('signature-canvas');
 const signatureContext = signatureCanvas.getContext('2d');
@@ -19,6 +23,7 @@ byId('receipt-number').textContent = receiptNumber;
 let receiptIssued = false;
 let cameraStream = null;
 let cameraSide = null;
+let pendingCameraImage = null;
 let signatureDataUrl = null;
 let signatureHasInk = false;
 let drawing = false;
@@ -27,9 +32,9 @@ let identityConflicts = [];
 let approvalRevision = 0;
 let verifiedRevision = null;
 let signedRevision = null;
-let archivePendingSave = false;
-let archiveEntries = [];
 let previewUrl = null;
+let previewDocument = null;
+let previewRenderId = 0;
 let archiveBusy = false;
 const scanQuality = { front: null, back: null };
 let mrzStatus = null;
@@ -88,6 +93,7 @@ function setBusy(value) {
   byId('export-button').disabled = value || identityConflicts.length > 0;
   byId('preview-button').disabled = value || identityConflicts.length > 0;
   byId('archive-save-button').disabled = value || identityConflicts.length > 0;
+  document.querySelectorAll('.scan-action input, [data-camera]').forEach(control => { control.disabled = !scanConsent.checked || value; });
 }
 
 function invalidateApproval() {
@@ -114,7 +120,8 @@ function invalidateApproval() {
 
 function updateCaptureAvailability() {
   const allowed = scanConsent.checked;
-  document.querySelectorAll('.scan-action input, [data-camera]').forEach(control => { control.disabled = !allowed; });
+  document.querySelectorAll('.scan-action input, [data-camera]').forEach(control => { control.disabled = !allowed || busy; });
+  if (busy) return;
   if (!allowed) scanStatus.textContent = 'Bitte erst die Zustimmung bestätigen und beide Seiten erfassen.';
   else if (!slots.front || !slots.back) scanStatus.textContent = 'Vorder- und Rückseite erfassen.';
   else scanStatus.textContent = 'Beide Seiten sind bereit. Angaben können erkannt werden.';
@@ -170,11 +177,14 @@ async function analyzeSlotQuality(side, slot, source) {
     return;
   }
   try {
-    const result = await ScanQuality.analyzeDataUrl(slot.dataUrl, { documentFillsFrame: source !== 'pdf' });
+    const result = await ScanQuality.analyzeDataUrl(slot.dataUrl, { documentFillsFrame: source === 'camera' });
     if (slots[side] !== slot) return;
-    if (source === 'camera') {
+    if (source === 'camera' || source === 'native-camera') {
       result.issues.push({ code: 'camera-edges', severity: 'warning', message: 'Bitte alle vier Dokumentränder in der Vorschau prüfen; der Kamerarahmen kann Beschnitt nicht sicher erkennen.' });
       result.uncertain = true;
+      if (result.metrics.width < 1000 || result.metrics.height < 620) {
+        result.issues.push({ code: 'camera-resolution', severity: 'warning', message: 'Die Auflösung der Aufnahme ist gering. Für kleine Ausweisschrift bitte näher und schärfer fotografieren.' });
+      }
     }
     scanQuality[side] = result;
     renderScanQuality();
@@ -192,7 +202,7 @@ async function analyzeSlotQuality(side, slot, source) {
 
 function setSlot(side, dataUrl, filename = 'Aufnahme', embeddedText = '', source = 'upload') {
   invalidateApproval();
-  slots[side] = { dataUrl, filename, embeddedText };
+  slots[side] = { dataUrl, filename, embeddedText, source };
   scanQuality[side] = source === 'sample' ? { uncertain: false, issues: [] } : null;
   mrzStatus = null;
   ocrFieldReview = [];
@@ -206,10 +216,9 @@ function setSlot(side, dataUrl, filename = 'Aufnahme', embeddedText = '', source
   byId('ocr-details').hidden = true;
   byId('ocr-raw').textContent = '';
   Object.values(sellerFields).forEach(field => {
-    field.value = '';
+    if (field.dataset.userEdited !== 'true') field.value = '';
     field.dataset.ocrFilled = 'false';
-    field.dataset.ocrConfidence = '';
-    field.dataset.userEdited = 'false';
+    field.dataset.ocrConfidence = field.dataset.userEdited === 'true' ? 'manual' : '';
   });
   const preview = byId(`${side}-preview`);
   preview.src = dataUrl;
@@ -220,15 +229,47 @@ function setSlot(side, dataUrl, filename = 'Aufnahme', embeddedText = '', source
   if (source !== 'sample') void analyzeSlotQuality(side, slots[side], source);
 }
 
+async function loadImageSource(blob) {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+      return { source: bitmap, release: () => bitmap.close() };
+    } catch { /* Einige Safari-Versionen können Dateien nur über <img> dekodieren. */ }
+  }
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.src = objectUrl;
+    await image.decode();
+    return { source: image, release: () => URL.revokeObjectURL(objectUrl) };
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
+}
+
+function canvasToBestJpeg(canvas) {
+  const dataUrl = canvas.toDataURL('image/jpeg', 1);
+  if (!dataUrl.startsWith('data:image/jpeg,')) throw new Error('Bild konnte nicht gespeichert werden.');
+  return dataUrl;
+}
+
 async function imageFileToDataUrl(file) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 2200 / bitmap.width, 1700 / bitmap.height);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return canvas.toDataURL('image/jpeg', .91);
+  const { source, release } = await loadImageSource(file);
+  try {
+    const width = source.width || source.naturalWidth;
+    const height = source.height || source.naturalHeight;
+    if (!width || !height) throw new Error('Bildformat kann nicht dekodiert werden.');
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Bildverarbeitung nicht verfügbar.');
+    context.drawImage(source, 0, 0);
+    return canvasToBestJpeg(canvas);
+  } finally {
+    release();
+  }
 }
 
 let pdfJsPromise;
@@ -267,13 +308,13 @@ async function pdfFileToImages(file) {
   return { images, texts };
 }
 
-async function handleFile(side, file) {
+async function handleFile(side, file, source = 'upload') {
   if (!file) return;
   if (!scanConsent.checked) { scanStatus.textContent = 'Bitte erst die Zustimmung bestätigen.'; return; }
-  if (file.size > 15 * 1024 * 1024) { scanStatus.textContent = 'Datei zu groß. Maximal 15 MB pro Datei.'; return; }
+  if (file.size > 25 * 1024 * 1024) { scanStatus.textContent = 'Datei zu groß. Maximal 25 MB pro Datei.'; return; }
   const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-  const isImage = file.type.startsWith('image/') && /^(image\/png|image\/jpeg|image\/webp)$/.test(file.type);
-  if (!isPdf && !isImage) { scanStatus.textContent = 'Bitte PNG, JPEG, WebP oder PDF wählen.'; return; }
+  const isImage = /^(image\/(png|jpeg|webp|heic|heif))$/i.test(file.type) || /\.(png|jpe?g|webp|heic|heif)$/i.test(file.name);
+  if (!isPdf && !isImage) { scanStatus.textContent = 'Bitte JPEG, PNG, WebP, HEIC/HEIF oder PDF wählen.'; return; }
   setBusy(true);
   scanStatus.textContent = `${file.name} wird vorbereitet …`;
   try {
@@ -283,12 +324,14 @@ async function handleFile(side, file) {
       setSlot(side, images[0], file.name, texts[0], 'pdf');
       if (side === 'front' && images[1] && !slots.back) setSlot('back', images[1], `${file.name} · Seite 2`, texts[1], 'pdf');
     } else {
-      setSlot(side, await imageFileToDataUrl(file), file.name);
+      setSlot(side, await imageFileToDataUrl(file), file.name, '', source);
     }
     scanStatus.textContent = 'Datei geladen. Bitte die Vorschau kontrollieren.';
   } catch (error) {
     console.error('Dokument konnte nicht gelesen werden:', error);
-    scanStatus.textContent = 'Die Datei konnte nicht gelesen werden. Bitte eine andere Datei wählen.';
+    scanStatus.textContent = /heic|heif/i.test(`${file.type} ${file.name}`)
+      ? 'HEIC/HEIF kann dieser Browser nicht lesen. Bitte die Kameraaufnahme oder ein JPEG/PNG verwenden.'
+      : 'Die Datei konnte nicht gelesen werden. Bitte ein anderes Bild oder PDF wählen.';
   } finally {
     setBusy(false);
   }
@@ -299,28 +342,95 @@ for (const side of ['front', 'back']) {
     handleFile(side, event.target.files?.[0]);
     event.target.value = '';
   });
+  byId(`${side}-capture-file`).addEventListener('change', event => {
+    handleFile(side, event.target.files?.[0], 'native-camera');
+    event.target.value = '';
+  });
 }
 
 function stopCamera() {
   cameraStream?.getTracks().forEach(track => track.stop());
   cameraStream = null;
   cameraVideo.srcObject = null;
+  pendingCameraImage = null;
+  cameraStage.classList.remove('reviewing');
+  cameraReviewImage.removeAttribute('src');
+  cameraReviewImage.hidden = true;
+  cameraReviewStatus.hidden = true;
+  cameraRetake.hidden = true;
+  byId('camera-capture').textContent = 'Aufnehmen';
   if (cameraDialog.open) cameraDialog.close();
+}
+
+async function captureStillPhoto(track) {
+  if (typeof ImageCapture !== 'function') return null;
+  let camera;
+  try { camera = new ImageCapture(track); }
+  catch { return null; }
+  const settings = {};
+  try {
+    const capabilities = await camera.getPhotoCapabilities();
+    if (capabilities.imageWidth?.max > 0) settings.imageWidth = capabilities.imageWidth.max;
+    if (capabilities.imageHeight?.max > 0) settings.imageHeight = capabilities.imageHeight.max;
+    if (capabilities.fillLightMode?.includes('off')) settings.fillLightMode = 'off';
+  } catch { /* Fotoaufnahme ohne zusätzliche Einstellungen versuchen. */ }
+  try { return await camera.takePhoto(settings); }
+  catch {
+    try { return await camera.takePhoto(); }
+    catch { return null; }
+  }
+}
+
+function cameraFrameToDataUrl(source, crop) {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(crop.width));
+  canvas.height = Math.max(1, Math.round(crop.height));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Kamerabild konnte nicht verarbeitet werden.');
+  context.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
+  return { dataUrl: canvasToBestJpeg(canvas), width: canvas.width, height: canvas.height };
 }
 
 async function openCamera(side) {
   if (!scanConsent.checked) return;
-  if (!navigator.mediaDevices?.getUserMedia) { scanStatus.textContent = 'Diese Kamera ist im Browser nicht verfügbar. Bitte eine Datei wählen.'; return; }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    scanStatus.textContent = 'Live-Kamera hier nicht verfügbar. Bitte „Foto aufnehmen“ oder eine Datei wählen.';
+    return;
+  }
   cameraSide = side;
   byId('camera-title').textContent = side === 'front' ? 'Vorderseite aufnehmen' : 'Rückseite aufnehmen';
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 } },
+      audio: false
+    });
+    const track = cameraStream.getVideoTracks()[0];
+    const capabilities = track?.getCapabilities?.() || {};
+    if (capabilities.width?.max && capabilities.height?.max) {
+      try {
+        await track.applyConstraints({
+          width: { ideal: capabilities.width.max },
+          height: { ideal: capabilities.height.max },
+          aspectRatio: { ideal: 4 / 3 }
+        });
+      } catch { /* Die bereits gewählte Kameraauflösung bleibt nutzbar. */ }
+    }
+    if (Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes('continuous')) {
+      try {
+        await track.applyConstraints({ ...track.getConstraints(), advanced: [{ focusMode: 'continuous' }] });
+      } catch { /* Die Kamera fokussiert mit ihren Standardeinstellungen. */ }
+    }
     cameraVideo.srcObject = cameraStream;
     cameraDialog.showModal();
     await cameraVideo.play();
+    const settings = cameraStream.getVideoTracks()[0]?.getSettings?.() || {};
+    const cameraHint = byId('camera-help');
+    cameraHint.textContent = settings.width && settings.width < 1280
+      ? 'Die Kamera liefert wenig Auflösung. Für besser lesbare Schrift bitte „Foto aufnehmen“ verwenden oder nah an den Ausweis gehen.'
+      : 'Alle vier Ränder innerhalb des Rahmens halten. Gleichmäßiges Licht ohne Spiegelung verwenden.';
   } catch {
     stopCamera();
-    scanStatus.textContent = 'Kamerazugriff nicht möglich. Bitte eine Bilddatei wählen.';
+    scanStatus.textContent = 'Kamerazugriff nicht möglich. Bitte „Foto aufnehmen“ oder eine Datei wählen.';
   }
 }
 
@@ -328,19 +438,92 @@ document.querySelectorAll('[data-camera]').forEach(button => button.addEventList
 byId('camera-close').addEventListener('click', stopCamera);
 byId('camera-cancel').addEventListener('click', stopCamera);
 cameraDialog.addEventListener('cancel', event => { event.preventDefault(); stopCamera(); });
-byId('camera-capture').addEventListener('click', () => {
+cameraRetake.addEventListener('click', () => {
+  pendingCameraImage = null;
+  cameraStage.classList.remove('reviewing');
+  cameraReviewImage.removeAttribute('src');
+  cameraReviewImage.hidden = true;
+  cameraReviewStatus.hidden = true;
+  cameraRetake.hidden = true;
+  byId('camera-capture').textContent = 'Aufnehmen';
+  byId('camera-help').textContent = 'Alle vier Ränder innerhalb des Rahmens halten. Gleichmäßiges Licht ohne Spiegelung verwenden.';
+  void cameraVideo.play().catch(() => {
+    byId('camera-help').textContent = 'Die Kameravorschau wurde angehalten. Bitte die Kamera schließen und erneut öffnen.';
+  });
+});
+byId('camera-capture').addEventListener('click', async () => {
+  if (pendingCameraImage) {
+    const image = pendingCameraImage;
+    setSlot(image.side, image.dataUrl, 'Kameraaufnahme', '', 'camera');
+    stopCamera();
+    scanStatus.textContent = `Aufnahme mit ${image.width} × ${image.height} Pixeln übernommen. Bitte die Lesbarkeit mit dem Original vergleichen.`;
+    return;
+  }
+  const stream = cameraStream;
+  const side = cameraSide;
   const width = cameraVideo.videoWidth;
   const height = cameraVideo.videoHeight;
-  if (!width || !height) { scanStatus.textContent = 'Kamera ist noch nicht bereit.'; return; }
-  const cropWidth = Math.min(width * .84, height * .74 * 1.58);
-  const cropHeight = cropWidth / 1.58;
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(Math.min(cropWidth, 2200));
-  canvas.height = Math.round(canvas.width / 1.58);
-  canvas.getContext('2d').drawImage(cameraVideo, (width - cropWidth) / 2, (height - cropHeight) / 2, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
-  setSlot(cameraSide, canvas.toDataURL('image/jpeg', .92), 'Kameraaufnahme', '', 'camera');
-  stopCamera();
-  scanStatus.textContent = 'Aufnahme erstellt. Bitte die Vorschau kontrollieren.';
+  if (!stream || !width || !height) { scanStatus.textContent = 'Kamera ist noch nicht bereit.'; return; }
+  const button = byId('camera-capture');
+  button.disabled = true;
+  let releasePhoto = null;
+  try {
+    const videoCrop = ScanCapture.guideCrop(width, height,
+      cameraDialog.querySelector('.camera-stage').getBoundingClientRect(),
+      cameraDialog.querySelector('.camera-guide').getBoundingClientRect());
+    let source = cameraVideo;
+    let crop = videoCrop;
+    const stillPhoto = await captureStillPhoto(stream.getVideoTracks()[0]);
+    if (cameraStream !== stream) return;
+    if (stillPhoto) {
+      try {
+        const image = await loadImageSource(stillPhoto);
+        if (cameraStream !== stream) { image.release(); return; }
+        const photoWidth = image.source.width || image.source.naturalWidth;
+        const photoHeight = image.source.height || image.source.naturalHeight;
+        if ((photoWidth >= photoHeight) === (width >= height)) {
+          releasePhoto = image.release;
+          source = image.source;
+          crop = ScanCapture.photoCrop(width, height, photoWidth, photoHeight, videoCrop);
+        } else image.release();
+      } catch (error) {
+        console.warn('Standbild nicht nutzbar, Videobild wird verwendet:', error);
+      }
+    }
+    let image;
+    try { image = cameraFrameToDataUrl(source, crop); }
+    catch (error) {
+      if (source === cameraVideo) throw error;
+      console.warn('Standbild zu groß oder nicht lesbar, Videobild wird verwendet:', error);
+      image = cameraFrameToDataUrl(cameraVideo, videoCrop);
+    }
+    pendingCameraImage = { ...image, side };
+    cameraReviewImage.src = image.dataUrl;
+    cameraReviewImage.hidden = false;
+    cameraStage.classList.add('reviewing');
+    cameraRetake.hidden = false;
+    button.textContent = 'Foto verwenden';
+    byId('camera-help').textContent = 'Prüfen Sie jetzt alle vier Ränder und die kleine Schrift. Bei Unschärfe oder Spiegelung erneut aufnehmen.';
+    cameraReviewStatus.hidden = false;
+    cameraReviewStatus.textContent = 'Bildqualität wird geprüft …';
+    try {
+      const quality = await ScanQuality.analyzeDataUrl(image.dataUrl, { documentFillsFrame: true });
+      if (cameraStream !== stream || pendingCameraImage?.dataUrl !== image.dataUrl) return;
+      const issues = quality.issues.map(issue => issue.message);
+      if (image.width < 1000 || image.height < 620) issues.unshift('Die Auflösung ist für kleine Ausweisschrift gering.');
+      cameraReviewStatus.textContent = issues.length
+        ? `${issues.slice(0, 2).join(' ')} Bitte neu aufnehmen oder nur nach Prüfung des Originals verwenden.`
+        : `${image.width} × ${image.height} Pixel. Prüfen Sie Ränder und Schrift; danach „Foto verwenden“ wählen.`;
+    } catch {
+      if (cameraStream === stream) cameraReviewStatus.textContent = 'Automatische Bildprüfung nicht verfügbar. Bitte Ränder und Schrift selbst prüfen.';
+    }
+  } catch (error) {
+    console.error('Kamerabild konnte nicht übernommen werden:', error);
+    scanStatus.textContent = 'Aufnahme fehlgeschlagen. Bitte erneut versuchen oder „Foto aufnehmen“ nutzen.';
+  } finally {
+    releasePhoto?.();
+    button.disabled = false;
+  }
 });
 window.addEventListener('pagehide', stopCamera);
 
@@ -390,22 +573,73 @@ async function cropForOcr(dataUrl, region, zoom = 3, threshold = false) {
   return canvas.toDataURL('image/png');
 }
 
-async function recognizeGermanIdZones(worker, frontDataUrl, backDataUrl) {
+async function centeredDocumentForOcr(dataUrl) {
+  const image = new Image();
+  image.src = dataUrl;
+  await image.decode();
+  const crop = ScanCapture.centeredDocumentCrop(image.naturalWidth, image.naturalHeight);
+  if (!crop) return null;
+  const scale = Math.min(1, 3200 / crop.width, 2400 / crop.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(crop.width * scale);
+  canvas.height = Math.round(crop.height * scale);
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', .96);
+}
+
+function recognitionScore(analysis) {
+  const required = ['first', 'last', 'birth', 'number', 'expiry', 'street', 'postal', 'city'];
+  const filled = required.filter(key => analysis.fields[key]).length;
+  const corroborated = required.filter(key => analysis.fieldStatus[key]?.confidence === 'high').length;
+  return (analysis.mrzStatus.state === 'valid' ? 30 : 0) + filled * 3 + corroborated * 2 - analysis.conflicts.length * 20;
+}
+
+function needsMoreRecognition(analysis) {
+  const required = ['first', 'last', 'birth', 'number', 'expiry', 'street', 'postal', 'city'];
+  return analysis.mrzStatus.state !== 'valid' || required.some(key => !analysis.fields[key]) ||
+    ['first', 'last', 'birth', 'number', 'expiry'].some(key => analysis.fieldStatus[key]?.confidence !== 'high');
+}
+
+async function recognizeDocumentZones(worker, frontDataUrl, backDataUrl, documentType, analysis) {
   const psm = window.Tesseract.PSM || {};
-  await worker.setParameters({ tessedit_pageseg_mode: psm.SINGLE_BLOCK || '6', preserve_interword_spaces: '1' });
-  scanStatus.textContent = 'Ausweisfelder werden gezielt gelesen …';
-  const frontFields = (await worker.recognize(await cropForOcr(frontDataUrl, [.41, .16, .57, .70], 3))).data.text;
-  const backAddress = (await worker.recognize(await cropForOcr(backDataUrl, [.41, .01, .48, .24], 3))).data.text;
-  await worker.setParameters({ tessedit_pageseg_mode: psm.SINGLE_LINE || '7', tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
-  const frontNumber = (await worker.recognize(await cropForOcr(frontDataUrl, [.68, .035, .30, .13], 4))).data.text.toUpperCase();
-  await worker.setParameters({ tessedit_pageseg_mode: psm.SINGLE_BLOCK || '6', tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<' });
-  scanStatus.textContent = 'Maschinenlesbare Zeilen werden geprüft …';
-  const backMrz = (await worker.recognize(await cropForOcr(backDataUrl, [.025, .65, .95, .26], 2.3, true))).data.text;
-  const number = frontNumber.match(/\b(?=[A-Z0-9]{9}\b)(?=[A-Z0-9]*\d)[A-Z0-9]{9}\b/)?.[0] || '';
-  return {
-    front: `${number ? `Dokumentnummer\n${number}\n` : ''}${frontFields}`,
-    back: `${backAddress}\n${backMrz}`
-  };
+  const zones = { front: '', back: '' };
+  const read = async (dataUrl, region, zoom = 3, threshold = false) =>
+    (await worker.recognize(await cropForOcr(dataUrl, region, zoom, threshold), { rotateAuto: true })).data.text;
+
+  if (documentType === 'Personalausweis') {
+    await worker.setParameters({ tessedit_pageseg_mode: psm.SINGLE_BLOCK || '6', tessedit_char_whitelist: '', preserve_interword_spaces: '1' });
+    if (['first', 'last', 'birth', 'birthplace', 'expiry'].some(key => analysis.fieldStatus[key]?.confidence !== 'high')) {
+      scanStatus.textContent = 'Vorderseite wird gezielt gelesen …';
+      zones.front += `${await read(frontDataUrl, [.38, .14, .61, .74])}\n`;
+    }
+    if (['street', 'postal', 'city'].some(key => !analysis.fields[key])) {
+      scanStatus.textContent = 'Anschrift wird gezielt gelesen …';
+      zones.back += `${await read(backDataUrl, [.37, .01, .58, .34])}\n`;
+    }
+    if (analysis.fieldStatus.number?.confidence !== 'high') {
+      await worker.setParameters({ tessedit_pageseg_mode: psm.SINGLE_LINE || '7', tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
+      const numberText = (await read(frontDataUrl, [.66, .02, .33, .15], 4)).toUpperCase();
+      const number = numberText.match(/\b(?=[A-Z0-9]{9}\b)(?=[A-Z0-9]*\d)[A-Z0-9]{9}\b/)?.[0];
+      if (number) zones.front = `Dokumentnummer\n${number}\n${zones.front}`;
+    }
+  }
+
+  if (analysis.mrzStatus.state !== 'valid') {
+    scanStatus.textContent = 'Maschinenlesbare Zeilen werden geprüft …';
+    await worker.setParameters({ tessedit_pageseg_mode: psm.SINGLE_BLOCK || '6', tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<' });
+    const mrzSide = documentType === 'Reisepass' ? 'front' : 'back';
+    const dataUrl = mrzSide === 'front' ? frontDataUrl : backDataUrl;
+    const region = documentType === 'Reisepass' ? [.015, .68, .97, .31] : [.015, .66, .97, .32];
+    zones[mrzSide] += `\n${await read(dataUrl, region, 2.5)}`;
+    const firstPass = IdParser.inspectMrz(zones[mrzSide]);
+    if (firstPass.status.state !== 'valid') {
+      zones[mrzSide] += `\n${await read(dataUrl, region, 2.5, true)}`;
+    }
+  }
+  return zones;
 }
 
 byId('recognize-button').addEventListener('click', async () => {
@@ -432,23 +666,62 @@ byId('recognize-button').addEventListener('click', async () => {
         if (message.status === 'recognizing text') scanStatus.textContent = `Text wird erkannt: ${Math.round(message.progress * 100)} %`;
       }
     });
-    let front = (await worker.recognize(frontSlot.dataUrl)).data.text;
-    let back = (await worker.recognize(backSlot.dataUrl)).data.text;
-    if (documentType === 'Personalausweis') {
-      const zones = await recognizeGermanIdZones(worker, frontSlot.dataUrl, backSlot.dataUrl);
-      front = `${zones.front}\n${front}`;
-      back = `${zones.back}\n${back}`;
-    }
+    let front = (await worker.recognize(frontSlot.dataUrl, { rotateAuto: true })).data.text;
+    let back = (await worker.recognize(backSlot.dataUrl, { rotateAuto: true })).data.text;
+    let frontOcrImage = frontSlot.dataUrl;
+    let backOcrImage = backSlot.dataUrl;
     const parse = (a, b) => IdParser.analyze(`${a}\n${frontSlot.embeddedText || ''}`, `${b}\n${backSlot.embeddedText || ''}`);
     let analysis = parse(front, back);
-    const score = result => Object.values(result.fields).filter(Boolean).length;
-    if (score(analysis) < 5) {
-      scanStatus.textContent = 'Kontrast wird verbessert und erneut erkannt …';
-      await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM?.AUTO || '3', tessedit_char_whitelist: '' });
-      const enhancedFront = (await worker.recognize(await enhancedForOcr(frontSlot.dataUrl))).data.text;
-      const enhancedBack = (await worker.recognize(await enhancedForOcr(backSlot.dataUrl))).data.text;
+    if (documentType === 'Personalausweis' && needsMoreRecognition(analysis)) {
+      scanStatus.textContent = 'Ausweis im Foto wird gezielt gesucht …';
+      for (const side of ['front', 'back']) {
+        if (!needsMoreRecognition(analysis)) break;
+        const slot = side === 'front' ? frontSlot : backSlot;
+        if (slot.source === 'camera' || slot.source === 'sample' || slot.embeddedText.trim().length > 20) continue;
+        try {
+          const candidateImage = await centeredDocumentForOcr(slot.dataUrl);
+          if (!candidateImage) continue;
+          const candidateText = (await worker.recognize(candidateImage, { rotateAuto: true })).data.text;
+          if (candidateText.trim().length < 8) continue;
+          const candidateFront = side === 'front' ? `${candidateText}\n${front}` : front;
+          const candidateBack = side === 'back' ? `${candidateText}\n${back}` : back;
+          const candidateAnalysis = parse(candidateFront, candidateBack);
+          if (recognitionScore(candidateAnalysis) > recognitionScore(analysis)) {
+            front = candidateFront;
+            back = candidateBack;
+            analysis = candidateAnalysis;
+            if (side === 'front') frontOcrImage = candidateImage;
+            else backOcrImage = candidateImage;
+          }
+        } catch (error) {
+          console.warn('Zusätzlicher Ausweis-Ausschnitt konnte nicht gelesen werden:', error);
+        }
+      }
+    }
+    if (needsMoreRecognition(analysis)) {
+      const zones = await recognizeDocumentZones(worker, frontOcrImage, backOcrImage, documentType, analysis);
+      const zonedFront = `${zones.front}\n${front}`;
+      const zonedBack = `${zones.back}\n${back}`;
+      const zoned = parse(zonedFront, zonedBack);
+      if (recognitionScore(zoned) >= recognitionScore(analysis)) {
+        front = zonedFront;
+        back = zonedBack;
+        analysis = zoned;
+      }
+    }
+    if (analysis.mrzStatus.state !== 'valid' || ['first', 'last', 'birth', 'number', 'expiry', 'street', 'postal', 'city'].some(key => !analysis.fields[key])) {
+      scanStatus.textContent = 'Schwierige Stellen werden mit verbessertem Kontrast gelesen …';
+      await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM?.AUTO || '3', tessedit_char_whitelist: '', preserve_interword_spaces: '0' });
+      const improveFront = ['first', 'last', 'birth', 'number', 'expiry'].some(key => !analysis.fields[key]);
+      const improveBack = analysis.mrzStatus.state !== 'valid' || ['street', 'postal', 'city'].some(key => !analysis.fields[key]);
+      const enhancedFront = improveFront ? (await worker.recognize(await enhancedForOcr(frontOcrImage), { rotateAuto: true })).data.text : '';
+      const enhancedBack = improveBack ? (await worker.recognize(await enhancedForOcr(backOcrImage), { rotateAuto: true })).data.text : '';
       const enhanced = parse(`${front}\n${enhancedFront}`, `${back}\n${enhancedBack}`);
-      if (score(enhanced) > score(analysis)) { front += `\n${enhancedFront}`; back += `\n${enhancedBack}`; analysis = enhanced; }
+      if (recognitionScore(enhanced) > recognitionScore(analysis)) {
+        front += `\n${enhancedFront}`;
+        back += `\n${enhancedBack}`;
+        analysis = enhanced;
+      }
     }
     if (slots.front !== frontSlot || slots.back !== backSlot || byId('document-type').value !== documentType) {
       throw new Error('Dokument während der Erkennung geändert. Bitte die Erkennung erneut starten.');
@@ -957,18 +1230,64 @@ function downloadPdf(bytes, number) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-function showPdfPreview(bytes, label) {
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
+async function showPdfPreview(bytes, label) {
+  const renderId = ++previewRenderId;
+  const pages = byId('pdf-preview-pages');
+  const status = byId('pdf-preview-status');
+  pages.replaceChildren();
+  status.textContent = 'PDF-Vorschau wird geladen …';
   previewUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-  byId('pdf-preview-frame').src = previewUrl;
+  byId('pdf-preview-open').href = previewUrl;
   byId('pdf-preview-label').textContent = label;
   previewDialog.showModal();
+  try {
+    const pdfjs = await getPdfJs();
+    const pdfDocument = await pdfjs.getDocument({
+      data: new Uint8Array(bytes),
+      isOffscreenCanvasSupported: false
+    }).promise;
+    if (renderId !== previewRenderId) { await pdfDocument.destroy(); return false; }
+    previewDocument = pdfDocument;
+    for (let number = 1; number <= pdfDocument.numPages; number++) {
+      status.textContent = `Seite ${number} von ${pdfDocument.numPages} wird angezeigt …`;
+      const page = await pdfDocument.getPage(number);
+      if (renderId !== previewRenderId) return false;
+      const original = page.getViewport({ scale: 1 });
+      const scale = Math.min(1.35, Math.max(1, pages.clientWidth - 24) / original.width);
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      const viewport = page.getViewport({ scale: scale * pixelRatio });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      canvas.style.width = `${Math.round(original.width * scale)}px`;
+      canvas.style.height = `${Math.round(original.height * scale)}px`;
+      canvas.setAttribute('aria-label', `Seite ${number} von ${pdfDocument.numPages}`);
+      pages.append(canvas);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      if (renderId !== previewRenderId) return false;
+      page.cleanup();
+    }
+    status.textContent = '';
+    return true;
+  } catch (error) {
+    if (renderId !== previewRenderId) return false;
+    console.error('PDF-Vorschau fehlgeschlagen:', error);
+    status.textContent = 'Vorschau konnte nicht dargestellt werden. Bitte „PDF separat öffnen“ verwenden.';
+    return false;
+  }
 }
 
 byId('pdf-preview-close').addEventListener('click', () => previewDialog.close());
 previewDialog.addEventListener('close', () => {
-  byId('pdf-preview-frame').removeAttribute('src');
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  ++previewRenderId;
+  byId('pdf-preview-pages').replaceChildren();
+  byId('pdf-preview-open').removeAttribute('href');
+  if (previewDocument) previewDocument.destroy().catch(() => {});
+  previewDocument = null;
+  if (previewUrl) {
+    const url = previewUrl;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
   previewUrl = null;
 });
 
@@ -976,8 +1295,9 @@ byId('preview-button').addEventListener('click', async () => {
   if (busy) return;
   try {
     const { bytes, data } = await createValidatedPdf();
-    showPdfPreview(bytes, `Beleg ${data.receiptNumber} · vor dem Speichern und Herunterladen prüfen`);
-    exportStatus.textContent = 'PDF-Vorschau geöffnet. Bitte beide Seiten kontrollieren.';
+    const shown = await showPdfPreview(bytes, `Beleg ${data.receiptNumber} · vor dem Speichern und Herunterladen prüfen`);
+    if (shown) exportStatus.textContent = 'PDF-Vorschau geöffnet. Bitte beide Seiten kontrollieren.';
+    else if (previewDialog.open) exportStatus.textContent = 'PDF erstellt. Bei Problemen mit der Vorschau bitte „PDF separat öffnen“ verwenden.';
   } catch (error) { exportStatus.textContent = error.message || 'PDF-Vorschau konnte nicht erstellt werden.'; }
 });
 
@@ -991,63 +1311,17 @@ byId('export-button').addEventListener('click', async () => {
   } catch (error) { exportStatus.textContent = error.message || 'PDF konnte nicht erstellt werden. Bitte Angaben und Bilder prüfen.'; }
 });
 
-function archiveCard(entry) {
-  const card = document.createElement('article');
-  card.className = 'archive-card';
-  const details = document.createElement('div');
-  const name = document.createElement('strong');
-  name.textContent = entry.sellerName;
-  const subline = document.createElement('span');
-  const date = new Intl.DateTimeFormat('de-DE').format(new Date(entry.createdAt));
-  subline.textContent = `${entry.number} · ${date} · ${euro(entry.totalPrice)}`;
-  details.append(name, subline);
-  const actions = document.createElement('div');
-  actions.className = 'archive-card-actions';
-  for (const [action, label] of [['view', 'Ansehen'], ['download', 'PDF laden'], ['delete', 'Löschen']]) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.action = action;
-    button.dataset.number = entry.number;
-    button.textContent = label;
-    actions.append(button);
-  }
-  card.append(details, actions);
-  return card;
-}
-
-function renderArchiveList() {
-  const query = byId('archive-search').value.trim().toLocaleLowerCase('de');
-  const matching = archiveEntries.filter(entry => `${entry.number} ${entry.sellerName} ${entry.createdAt} ${displayDate(entry.createdAt.slice(0, 10))}`.toLocaleLowerCase('de').includes(query));
-  const list = byId('archive-list');
-  list.replaceChildren();
-  if (!matching.length) {
-    const empty = document.createElement('p');
-    empty.className = 'archive-empty';
-    empty.textContent = query ? 'Kein passender Beleg gefunden.' : 'Noch keine Belege in diesem Browser gespeichert.';
-    list.append(empty);
-    return;
-  }
-  list.append(...matching.map(archiveCard));
-}
-
-async function refreshArchive() {
-  archiveEntries = await BelegArchive.list();
-  renderArchiveList();
-}
-
 function setArchiveBusy(value) {
   archiveBusy = value;
   byId('archive-close').disabled = value;
-  byId('archive-lock-button').disabled = value;
   byId('archive-unlock-button').disabled = value;
-  byId('archive-list').querySelectorAll('button').forEach(button => { button.disabled = value; });
+  byId('archive-done-button').disabled = value;
 }
 
-async function openArchive(pendingSave = false) {
-  archivePendingSave = pendingSave;
+async function openArchiveForSave() {
   byId('archive-status').textContent = '';
   byId('archive-unlock-form').hidden = false;
-  byId('archive-browser').hidden = true;
+  byId('archive-save-done').hidden = true;
   byId('archive-unlock-form').reset();
   archiveDialog.showModal();
   try {
@@ -1077,7 +1351,6 @@ async function saveCurrentToArchive() {
     if (receiptNumber === data.receiptNumber) receiptIssued = wasIssued;
     throw error;
   }
-  await refreshArchive();
   const message = data.receiptNumber === receiptNumber
     ? `Beleg ${data.receiptNumber} verschlüsselt im lokalen Browserarchiv gespeichert. Für einen weiteren Beleg die Angaben ändern oder die Seite neu laden.`
     : `Beleg ${data.receiptNumber} gespeichert. Das Formular wurde inzwischen geändert; der neue Beleg ${receiptNumber} muss erneut geprüft und unterschrieben werden.`;
@@ -1085,10 +1358,9 @@ async function saveCurrentToArchive() {
   exportStatus.textContent = message;
 }
 
-byId('archive-open-button').addEventListener('click', () => openArchive());
 byId('archive-save-button').addEventListener('click', async () => {
   if (busy) return;
-  try { collectAndValidate(); await openArchive(true); }
+  try { collectAndValidate(); await openArchiveForSave(); }
   catch (error) { exportStatus.textContent = error.message; }
 });
 byId('archive-unlock-form').addEventListener('submit', async event => {
@@ -1098,48 +1370,19 @@ byId('archive-unlock-form').addEventListener('submit', async event => {
   byId('archive-status').textContent = 'Archiv wird geöffnet …';
   try {
     await BelegArchive.unlock(byId('archive-password').value, byId('archive-confirm').value);
+    await saveCurrentToArchive();
     byId('archive-unlock-form').reset();
     byId('archive-unlock-form').hidden = true;
-    byId('archive-browser').hidden = false;
-    await refreshArchive();
-    if (archivePendingSave) { archivePendingSave = false; await saveCurrentToArchive(); }
-    else byId('archive-status').textContent = `${archiveEntries.length} Belege im lokalen Archiv.`;
+    byId('archive-save-done').hidden = false;
   } catch (error) { byId('archive-status').textContent = error.message || 'Archiv konnte nicht geöffnet werden.'; }
   finally { setArchiveBusy(false); }
 });
-byId('archive-search').addEventListener('input', renderArchiveList);
-byId('archive-list').addEventListener('click', async event => {
-  const button = event.target.closest('button[data-action]');
-  if (!button || archiveBusy) return;
-  const { action, number } = button.dataset;
-  setArchiveBusy(true);
-  try {
-    if (action === 'delete') {
-      if (!window.confirm(`Beleg ${number} unwiderruflich aus diesem Browserarchiv löschen?`)) return;
-      await BelegArchive.remove(number);
-      await refreshArchive();
-      byId('archive-status').textContent = `Beleg ${number} aus dem lokalen Archiv gelöscht.`;
-    } else {
-      const bytes = await BelegArchive.pdf(number);
-      if (action === 'download') {
-        downloadPdf(bytes, number);
-        byId('archive-status').textContent = `PDF ${number} heruntergeladen.`;
-      } else {
-        archiveDialog.close();
-        showPdfPreview(bytes, `Archivierter Beleg ${number}`);
-      }
-    }
-  } catch (error) { byId('archive-status').textContent = error.message || 'Archivaktion fehlgeschlagen.'; }
-  finally { setArchiveBusy(false); }
-});
 byId('archive-close').addEventListener('click', () => { if (!archiveBusy) archiveDialog.close(); });
-byId('archive-lock-button').addEventListener('click', () => { if (!archiveBusy) archiveDialog.close(); });
+byId('archive-done-button').addEventListener('click', () => { if (!archiveBusy) archiveDialog.close(); });
 archiveDialog.addEventListener('cancel', event => { if (archiveBusy) event.preventDefault(); });
 archiveDialog.addEventListener('close', () => {
   BelegArchive.lock();
-  archivePendingSave = false;
-  archiveEntries = [];
   byId('archive-unlock-form').reset();
-  byId('archive-list').replaceChildren();
+  byId('archive-save-done').hidden = true;
 });
 window.addEventListener('pagehide', () => BelegArchive.lock());

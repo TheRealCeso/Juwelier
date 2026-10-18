@@ -31,7 +31,7 @@ assert.equal(damaged.number, '');
 assert.equal(damaged.birth, '');
 assert.equal(damaged.last, '');
 
-const { analyze } = require('./id-parser.js');
+const { analyze, inspectMrz } = require('./id-parser.js');
 assert.equal(analyze('', td1).mrzStatus.state, 'valid');
 assert.deepEqual(analyze('', td1).mrzStatus.checks, { document: true, birth: true, expiry: true });
 assert.equal(analyze('', td1).fieldStatus.number.confidence, 'review', 'Ohne visuellen Abgleich bleibt selbst eine gültige MRZ prüfpflichtig.');
@@ -40,9 +40,39 @@ assert.equal(damagedAnalysis.mrzStatus.state, 'invalid');
 assert.ok(damagedAnalysis.mrzStatus.issues.includes('mrz-check-document'));
 assert.equal(analyze('', 'IDD<<ABCD').mrzStatus.issues[0], 'mrz-incomplete');
 assert.equal(analyze('Kein maschinenlesbarer Text').mrzStatus.state, 'missing');
+const recoveredTd1 = [
+  `1${td1.split('\n')[0].slice(1, -1)}`,
+  `${td1.split('\n')[1].slice(0, -2)}${td1.split('\n')[1].slice(-1)}`,
+  td1.split('\n')[2].slice(0, -2)
+].join('\n');
+assert.equal(inspectMrz(recoveredTd1).status.state, 'valid', 'Fehlende Füllzeichen am Zeilenende und 1/I am Dokumentanfang werden korrigiert.');
+assert.equal(extract('', recoveredTd1).number, 'D23145890');
+const extraFillersTd1 = [
+  `${td1.split('\n')[0]}<`,
+  `${td1.split('\n')[1].slice(0, -1)}<${td1.split('\n')[1].slice(-1)}`,
+  `${td1.split('\n')[2]}<`
+].join('\n');
+assert.equal(inspectMrz(extraFillersTd1).status.state, 'valid', 'Zusätzliche Füllzeichen bleiben reparierbar.');
+const missingDocumentChar = `${td1.split('\n')[0].slice(0, 8)}${td1.split('\n')[0].slice(9)}\n${td1.split('\n')[1]}\n${td1.split('\n')[2]}`;
+assert.equal(inspectMrz(missingDocumentChar).status.checks.document, false, 'Ein fehlendes Zeichen im geprüften Feld darf nicht erraten werden.');
+assert.equal(extract('', missingDocumentChar).number, '');
+assert.equal(inspectMrz(`${td1.split('\n')[0]}X\n${td1.split('\n')[1]}\n${td1.split('\n')[2]}`).status.state, 'invalid', 'Beliebige zusätzliche Zeichen sind keine Füllzeichen.');
+const passportWithFinalCheck = `${passportBottom.slice(0, 28).padEnd(43, '<')}${checkDigit(passportBottom.slice(0, 10) + passportBottom.slice(13, 20) + passportBottom.slice(21, 43))}`;
+const passportMissingFiller = `${passportTop.slice(0, -1)}\n${passportWithFinalCheck.slice(0, -2)}${passportWithFinalCheck.slice(-1)}`;
+assert.equal(inspectMrz(passportMissingFiller).status.state, 'valid', 'Reisepass-MRZ mit fehlendem Füllzeichen bleibt lesbar.');
+assert.equal(extract(passportMissingFiller).number, passportNo);
 const impossibleBirth = '991332';
 const invalidDateBottom = `${passportNo}${checkDigit(passportNo)}DEU${impossibleBirth}${checkDigit(impossibleBirth)}M300101${checkDigit('300101')}`.padEnd(44, '<');
 assert.equal(analyze(`${passportTop}\n${invalidDateBottom}`).mrzStatus.checks.birth, false, 'Eine gültige Prüfziffer darf ein unmögliches Datum nicht freigeben.');
+const centuryAmbiguousBirth = '200101';
+const centuryAmbiguousBottom = `${passportNo}${checkDigit(passportNo)}DEU${centuryAmbiguousBirth}${checkDigit(centuryAmbiguousBirth)}M300101${checkDigit('300101')}`.padEnd(44, '<');
+const ambiguousMrz = inspectMrz(`${passportTop}\n${centuryAmbiguousBottom}`);
+assert.equal(ambiguousMrz.status.state, 'valid', 'Die Geburts-Prüfziffer ist unabhängig vom Jahrhundert gültig.');
+assert.equal(ambiguousMrz.status.ambiguousBirthCentury, true);
+assert.equal(ambiguousMrz.fields.birth, undefined, 'Aus sechs MRZ-Ziffern allein folgt kein sicheres Geburtsjahrhundert.');
+const centuryFromVisual = analyze('Geburtsdatum: 01.01.1920', `${passportTop}\n${centuryAmbiguousBottom}`);
+assert.equal(centuryFromVisual.fields.birth, '01.01.1920');
+assert.equal(centuryFromVisual.fieldStatus.birth.confidence, 'review', 'Auch mit visuellem Geburtsdatum bleibt das Jahrhundert prüfpflichtig.');
 const germanFront = 'LZ6311T47\n[a] Name/Surname/Nom\n[a] MUSTERMANN\n[b] GABLER\nVornamen/Given names/Prénoms\nERIKA\nGeburtstag/Date of birth\n12.08.1983\nGeburtsort/Place of birth\nBERLIN\nStaatsangehörigkeit/Nationality\nDEUTSCH\nGültig bis/Date of expiry\n01.05.2034';
 const germanBack = 'Anschrift/Address/Adresse\n51147 KÖLN\nHEIDESTRASSE, 17\nIDD<<LOIXOOT471<<<<<<<<<<<<<<<\n8308126<3108011D<<2108<<<<<<<7\nMUSTERMANN<<ERIKA<<<<<<<<<<<<<';
 const german = analyze(germanFront, germanBack);
@@ -80,4 +110,23 @@ assert.deepEqual([noisy.fields.first, noisy.fields.last, noisy.fields.birth, noi
 assert.equal(noisy.mrz.number, 'L01X00T47');
 assert.deepEqual(noisy.conflicts, ['Dokumentnummer', 'Gültigkeitsdatum']);
 
-console.log('OCR-Feldextraktion, MRZ-Prüfstatus und Seitenabgleich: 11 Fälle bestanden.');
+const mobileFront = `Vornamen/Given names/Prénoms Ko. \\e vl
+ERIKA ONS
+Geburtstag/Date of birth
+Geburtsart/ of birth/Lieu de naissance
+BERLIN
+01.05.2034
+MUSTERMANN`;
+const mobileBack = `Anschrift/Address/Adresse
+51147 KÖLN VE
+HEIDESTRASSE, 17
+IDD<<LO1X00T471<<<<<<<<<<<<<<<
+8308126<3108011D<<2108<<<<<<<7
+MUSTERMANN<<ERIKA<<<<<<<<<<<<<`;
+const mobile = analyze(mobileFront, mobileBack);
+assert.equal(mobile.fields.first, 'ERIKA', 'Ein verifiziertes MRZ-Namensfeld schlägt kurze OCR-Störzeichen, wenn der Name visuell erscheint.');
+assert.equal(mobile.fields.city, 'KÖLN', 'Kurze Musterreste nach einem Ortsnamen werden nicht übernommen.');
+assert.equal(mobile.fields.birthplace, 'BERLIN', 'Eine häufige OCR-Verwechslung in „Geburtsort“ wird gelesen.');
+assert.equal(mobile.fieldStatus.first.confidence, 'review', 'Der Name bleibt trotz Übernahme prüfpflichtig.');
+
+console.log('OCR-Feldextraktion, konservative MRZ-Reparatur, Jahrhundertprüfung und Seitenabgleich bestanden.');

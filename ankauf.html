@@ -13,8 +13,10 @@
     <script src="assets/vendor/pdf-lib/fontkit.umd.min.js" defer></script>
     <script src="id-parser.js" defer></script>
     <script src="scan-quality.js" defer></script>
+    <script src="scan-capture.js" defer></script>
     <script src="archive-local.js" defer></script>
     <script src="ankauf.js" defer></script>
+    <script src="button-touch.js" defer></script>
   </head>
   <body class="purchase-page">
     <a class="skip-link" href="#main">Zum Inhalt springen</a>
@@ -22,10 +24,12 @@
       <div class="purchase-header-inner shell">
         <a class="brand" href="index.html" aria-label="Juwelier Gök – zur Startseite">
           <span class="brand-icon" aria-hidden="true"><img src="assets/goek-logo-transparent.png" alt="" /></span>
-          <span class="brand-text"><strong>GÖK</strong><small>JUWELIER · AUGSBURG</small></span>
         </a>
-        <span class="purchase-header-label">ANKAUF · TESTBEREICH</span>
-        <button type="button" class="purchase-logout" id="logout-button">Abmelden <span aria-hidden="true">↗</span></button>
+        <nav class="purchase-nav" aria-label="Ankaufbelege">
+          <a href="ankauf.html" aria-current="page">Neuer Ankaufbeleg</a>
+          <a href="belegarchiv.html">Ankaufbeleg Archiv</a>
+        </nav>
+        <button type="button" class="purchase-logout" id="logout-button">Abmelden <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></button>
       </div>
     </header>
 
@@ -36,7 +40,7 @@
           <h1>Ankaufbeleg<span>.</span></h1>
           <p>Ausweis erfassen, Angaben prüfen und einen Beleg mit Unterschrift als PDF ausgeben.</p>
         </div>
-        <button type="button" class="purchase-demo-button" id="sample-button">Beispieldaten laden <span aria-hidden="true">↗</span></button>
+        <button type="button" class="purchase-demo-button" id="sample-button">Beispieldaten laden <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></button>
       </div>
 
       <div class="purchase-alert" role="note">
@@ -50,19 +54,20 @@
           <div class="purchase-field purchase-document-type"><label for="document-type">Dokumentart</label><select id="document-type"><option value="Personalausweis">Personalausweis</option><option value="Reisepass">Reisepass</option></select></div>
           <label class="purchase-check"><input id="scan-consent" type="checkbox" /><span><strong>Aufnahme & Information</strong><small>Ich habe geprüft, dass die Aufnahme dieser Dokumentseiten zulässig ist und die betroffene Person über Zweck und Verwendung informiert wurde.</small></span></label>
           <p class="purchase-help">Für Personalausweis und Reisepass muss eine Kopie als solche erkennbar sein. Die PDF-Anlagen erhalten deshalb einen sichtbaren „KOPIE“-Hinweis. Laden Sie nur die erforderlichen Seiten hoch.</p>
+          <p class="scan-tips">Alle vier Ecken zeigen, gleichmäßig beleuchten und Spiegelungen vermeiden. Auf iPhone und iPad können Sie direkt ein Foto aufnehmen.</p>
           <div class="scan-grid">
             <article class="scan-card" data-side="front">
               <div class="scan-card-top"><span>VORDERSEITE / DATENSEITE</span><span id="front-state">Noch nicht erfasst</span></div>
               <div class="scan-frame" id="front-frame"><img id="front-preview" alt="Vorschau der Vorderseite" hidden /><span class="scan-placeholder" id="front-placeholder">Dokument im Rahmen ausrichten</span></div>
-              <div class="scan-actions"><label class="scan-action"><input id="front-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" disabled />Bild oder PDF wählen</label><button type="button" class="scan-action" data-camera="front" disabled>Kamera öffnen</button></div>
+              <div class="scan-actions"><label class="scan-action scan-action-capture"><input id="front-capture-file" type="file" accept="image/*" capture="environment" aria-label="Vorderseite mit der Gerätekamera fotografieren" disabled />Foto aufnehmen</label><label class="scan-action"><input id="front-file" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,.pdf" aria-label="Vorderseite als Bild oder PDF auswählen" disabled />Bild oder PDF wählen</label><button type="button" class="scan-action" data-camera="front" aria-label="Live-Kamera für die Vorderseite öffnen" disabled>Live-Kamera öffnen</button></div>
             </article>
             <article class="scan-card" data-side="back">
               <div class="scan-card-top"><span>RÜCKSEITE / WEITERE SEITE</span><span id="back-state">Noch nicht erfasst</span></div>
               <div class="scan-frame" id="back-frame"><img id="back-preview" alt="Vorschau der Rückseite" hidden /><span class="scan-placeholder" id="back-placeholder">Dokument im Rahmen ausrichten</span></div>
-              <div class="scan-actions"><label class="scan-action"><input id="back-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" disabled />Bild oder PDF wählen</label><button type="button" class="scan-action" data-camera="back" disabled>Kamera öffnen</button></div>
+              <div class="scan-actions"><label class="scan-action scan-action-capture"><input id="back-capture-file" type="file" accept="image/*" capture="environment" aria-label="Rückseite mit der Gerätekamera fotografieren" disabled />Foto aufnehmen</label><label class="scan-action"><input id="back-file" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,.pdf" aria-label="Rückseite als Bild oder PDF auswählen" disabled />Bild oder PDF wählen</label><button type="button" class="scan-action" data-camera="back" aria-label="Live-Kamera für die Rückseite öffnen" disabled>Live-Kamera öffnen</button></div>
             </article>
           </div>
-          <div class="purchase-inline-actions"><button type="button" class="purchase-primary" id="recognize-button">Angaben erkennen <span aria-hidden="true">↗</span></button><p id="scan-status" role="status" aria-live="polite">Bitte erst die Zustimmung bestätigen und beide Seiten erfassen.</p></div>
+          <div class="purchase-inline-actions"><button type="button" class="purchase-primary" id="recognize-button">Angaben erkennen <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></button><p id="scan-status" role="status" aria-live="polite">Bitte erst die Zustimmung bestätigen und beide Seiten erfassen.</p></div>
           <div class="scan-quality-result" id="scan-quality-result" hidden><strong>Bildqualität prüfen</strong><ul id="scan-quality-list"></ul></div>
           <details class="ocr-details" id="ocr-details" hidden><summary>Erkannten Text prüfen</summary><pre id="ocr-raw"></pre></details>
         </div>
@@ -106,8 +111,8 @@
           <p class="purchase-help">Der Verkäufer bestätigt die Angaben und den vereinbarten Ankaufspreis mit seiner Unterschrift. Ändert sich der Beleg danach, muss erneut geprüft und unterschrieben werden.</p>
           <div class="signature-row"><div class="signature-preview" id="signature-preview"><span>Noch keine Unterschrift</span></div><button type="button" class="purchase-secondary" id="sign-button">Unterschreiben</button></div>
           <div class="receipt-reference"><span>BELEGNUMMER</span><strong id="receipt-number"></strong></div>
-          <div class="purchase-finish"><div><strong>Beleg fertigstellen</strong><p>Der PDF-Beleg enthält die Ankaufpositionen und auf der Folgeseite die Dokumentkopien.</p></div><div class="purchase-finish-actions"><button type="button" class="purchase-secondary" id="preview-button">PDF ansehen</button><button type="button" class="purchase-primary" id="export-button">PDF herunterladen <span aria-hidden="true">↓</span></button><button type="button" class="purchase-secondary" id="archive-save-button">Im Archiv speichern</button></div></div>
-          <div class="archive-entry"><button type="button" id="archive-open-button">Belegarchiv öffnen <span aria-hidden="true">↗</span></button><p>Verschlüsselt und nur in diesem Browser gespeichert. Für eine zusätzliche Sicherung die PDF herunterladen.</p></div>
+          <div class="purchase-finish"><div><strong>Beleg fertigstellen</strong><p>Der PDF-Beleg enthält die Ankaufpositionen und auf der Folgeseite die Dokumentkopien.</p></div><div class="purchase-finish-actions"><button type="button" class="purchase-secondary" id="preview-button">PDF ansehen</button><button type="button" class="purchase-primary" id="export-button">PDF herunterladen <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M12 4v16m-6-6 6 6 6-6"/></svg></span></button><button type="button" class="purchase-secondary" id="archive-save-button">Im Archiv speichern</button></div></div>
+          <p class="archive-note">Verschlüsselt und nur in diesem Browser gespeichert. Für eine zusätzliche Sicherung die PDF herunterladen.</p>
           <p id="export-status" class="purchase-status" role="status" aria-live="polite"></p>
         </div>
       </section>
@@ -115,9 +120,9 @@
 
     <footer class="purchase-footer shell"><span>Juwelier Gök · Testbereich</span><div><a href="index.html">Zur Website</a><a href="datenschutz.html">Datenschutz</a></div></footer>
 
-    <dialog class="purchase-dialog camera-dialog" id="camera-dialog" aria-labelledby="camera-title"><div class="dialog-head"><div><p class="kicker">DOKUMENT ERFASSEN</p><h2 id="camera-title">Kamera</h2></div><button type="button" class="dialog-close" id="camera-close" aria-label="Kamera schließen">×</button></div><div class="camera-stage"><video id="camera-video" autoplay playsinline muted></video><div class="camera-guide" aria-hidden="true"></div></div><p>Dokument vollständig in den Rahmen legen. Der Zugriff auf die Kamera endet nach der Aufnahme.</p><div class="dialog-actions"><button type="button" class="purchase-secondary" id="camera-cancel">Abbrechen</button><button type="button" class="purchase-primary" id="camera-capture">Aufnehmen</button></div></dialog>
+    <dialog class="purchase-dialog camera-dialog" id="camera-dialog" aria-labelledby="camera-title" aria-describedby="camera-help"><div class="dialog-head"><div><p class="kicker">DOKUMENT ERFASSEN</p><h2 id="camera-title">Kamera</h2></div><button type="button" class="dialog-close" id="camera-close" aria-label="Kamera schließen">×</button></div><div class="camera-stage" id="camera-stage"><video id="camera-video" autoplay playsinline muted></video><div class="camera-guide" aria-hidden="true"></div><img id="camera-review-image" alt="Aufgenommenes Dokument zur Prüfung" hidden /></div><p id="camera-help">Alle vier Ecken im Rahmen zeigen, ruhig halten und Spiegelungen vermeiden.</p><p class="camera-review-status" id="camera-review-status" role="status" aria-live="polite" hidden></p><div class="dialog-actions"><button type="button" class="purchase-secondary" id="camera-cancel">Abbrechen</button><button type="button" class="purchase-secondary" id="camera-retake" hidden>Erneut aufnehmen</button><button type="button" class="purchase-primary" id="camera-capture">Aufnehmen</button></div></dialog>
     <dialog class="purchase-dialog signature-dialog" id="signature-dialog" aria-labelledby="signature-title"><div class="dialog-head"><div><p class="kicker">VERKÄUFER</p><h2 id="signature-title">Unterschreiben</h2></div><button type="button" class="dialog-close" id="signature-close" aria-label="Dialog schließen">×</button></div><p>Bitte mit Finger, Stift oder Maus im Feld unterschreiben.</p><canvas id="signature-canvas" width="900" height="300" aria-label="Unterschriftsfeld"></canvas><div class="dialog-actions"><button type="button" class="purchase-secondary" id="signature-clear">Löschen</button><button type="button" class="purchase-primary" id="signature-save">Unterschrift übernehmen</button></div><p class="purchase-status" id="signature-status" role="status"></p></dialog>
-    <dialog class="purchase-dialog pdf-preview-dialog" id="pdf-preview-dialog" aria-labelledby="pdf-preview-title"><div class="dialog-head"><div><p class="kicker">BELEG PRÜFEN</p><h2 id="pdf-preview-title">PDF-Vorschau</h2></div><button type="button" class="dialog-close" id="pdf-preview-close" aria-label="Vorschau schließen">×</button></div><p id="pdf-preview-label"></p><iframe id="pdf-preview-frame" title="Ankaufbeleg als PDF"></iframe></dialog>
-    <dialog class="purchase-dialog archive-dialog" id="archive-dialog" aria-labelledby="archive-title"><div class="dialog-head"><div><p class="kicker">LOKAL · VERSCHLÜSSELT</p><h2 id="archive-title">Belegarchiv</h2></div><button type="button" class="dialog-close" id="archive-close" aria-label="Archiv schließen">×</button></div><p>Dieses Testarchiv liegt ausschließlich in diesem Browser. Ohne Archiv-Passwort oder nach dem Löschen der Browserdaten können die Belege nicht wiederhergestellt werden.</p><form id="archive-unlock-form"><div class="purchase-field"><label for="archive-password">Archiv-Passwort</label><input id="archive-password" type="password" autocomplete="off" required /></div><div class="purchase-field" id="archive-confirm-wrap" hidden><label for="archive-confirm">Passwort wiederholen</label><input id="archive-confirm" type="password" autocomplete="off" /></div><div class="dialog-actions"><button type="submit" class="purchase-primary" id="archive-unlock-button">Archiv entsperren</button></div></form><div id="archive-browser" hidden><div class="purchase-field"><label for="archive-search">Belege suchen</label><input id="archive-search" type="search" placeholder="Name, Nummer oder Datum" autocomplete="off" /></div><div class="archive-list" id="archive-list"></div><div class="dialog-actions"><button type="button" class="purchase-secondary" id="archive-lock-button">Archiv sperren</button></div></div><p class="purchase-status" id="archive-status" role="status" aria-live="polite"></p></dialog>
+    <dialog class="purchase-dialog pdf-preview-dialog" id="pdf-preview-dialog" aria-labelledby="pdf-preview-title"><div class="dialog-head"><div><p class="kicker">BELEG PRÜFEN</p><h2 id="pdf-preview-title">PDF-Vorschau</h2></div><button type="button" class="dialog-close" id="pdf-preview-close" aria-label="Vorschau schließen">×</button></div><p id="pdf-preview-label"></p><p class="pdf-preview-status" id="pdf-preview-status" role="status" aria-live="polite"></p><div class="pdf-preview-pages" id="pdf-preview-pages" aria-label="Seiten des Ankaufbelegs"></div><div class="dialog-actions"><a class="purchase-secondary" id="pdf-preview-open" target="_blank" rel="noopener" href="#">PDF separat öffnen</a></div></dialog>
+    <dialog class="purchase-dialog archive-dialog" id="archive-dialog" aria-labelledby="archive-title"><div class="dialog-head"><div><p class="kicker">LOKAL · VERSCHLÜSSELT</p><h2 id="archive-title">Im Archiv speichern</h2></div><button type="button" class="dialog-close" id="archive-close" aria-label="Dialog schließen">×</button></div><p>Das Testarchiv liegt ausschließlich in diesem Browser. Zum Speichern bitte das Archiv-Passwort eingeben.</p><form id="archive-unlock-form"><div class="purchase-field"><label for="archive-password">Archiv-Passwort</label><input id="archive-password" type="password" autocomplete="off" required /></div><div class="purchase-field" id="archive-confirm-wrap" hidden><label for="archive-confirm">Passwort wiederholen</label><input id="archive-confirm" type="password" autocomplete="off" /></div><div class="dialog-actions"><button type="submit" class="purchase-primary" id="archive-unlock-button">Archiv entsperren</button></div></form><p class="purchase-status" id="archive-status" role="status" aria-live="polite"></p><div class="dialog-actions" id="archive-save-done" hidden><a class="purchase-secondary" href="belegarchiv.html">Zum Belegarchiv</a><button type="button" class="purchase-primary" id="archive-done-button">Schließen</button></div></dialog>
   </body>
 </html>

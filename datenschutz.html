@@ -8,14 +8,14 @@
     <title>Datenschutz – Juwelier Gök Augsburg</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="script.js" defer></script>
+    <script src="button-touch.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Zum Inhalt springen</a>
-    <header class="site-header" id="top">
+    <header class="site-header public-header" id="top">
       <div class="header-inner shell">
         <a class="brand" href="index.html" aria-label="Juwelier Gök – zur Startseite">
           <span class="brand-icon" aria-hidden="true"><img src="assets/goek-logo-transparent.png" alt="" /></span>
-          <span class="brand-text"><strong>GÖK</strong><small>JUWELIER · AUGSBURG</small></span>
         </a>
         <nav class="desktop-nav" aria-label="Hauptnavigation">
           <a href="index.html">Startseite</a>
@@ -50,7 +50,6 @@
           <div class="legal-notice" role="note">
             <strong>Hinweis zur lokalen Vorschau</strong>
             <p>Der Hosting-Anbieter für die öffentliche Website steht noch nicht fest. Die Angaben zu Serverprotokollen, Empfängern und Speicherfristen müssen vor der Veröffentlichung ergänzt und geprüft werden.</p>
-            <p>Der Ankaufbereich ist derzeit nur ein Testprototyp. Vor der Verarbeitung echter Ausweisdaten müssen Rechtsgrundlage, Aufbewahrung, Löschung und Zugriffsschutz festgelegt und geprüft werden.</p>
           </div>
           <section aria-labelledby="privacy-controller">
             <h2 id="privacy-controller">1. Verantwortlicher</h2>
@@ -75,28 +74,24 @@
             <p>Die Edelmetallkurse werden nur abgerufen, wenn Sie auf „Kurse laden“ klicken. Dabei verbindet sich Ihr Browser mit <a href="https://gold-api.com/privacy" target="_blank" rel="noopener noreferrer">Gold API</a> für Gold- und Silberkurse und mit <a href="https://frankfurter.dev/" target="_blank" rel="noopener noreferrer">Frankfurter</a> für den USD/EUR-Wechselkurs. Ihre IP-Adresse und technisch erforderliche Verbindungsdaten werden an diese Anbieter übermittelt. Gold API gibt an, API-Anfragen einschließlich IP-Adressen zu protokollieren und Daten auch außerhalb Ihres Landes zu verarbeiten. Frankfurter gibt an, keine personenbezogenen Anfragedaten zu protokollieren; die öffentliche API nutzt Cloudflare.</p>
             <p>Der Abruf erfolgt auf Grundlage Ihrer Einwilligung durch den bewussten Klick (Art. 6 Abs. 1 lit. a DSGVO). Die Website speichert dafür weder einen Cookie noch eine dauerhafte Einwilligung. Bei einem neuen Seitenaufruf ist ein erneuter Klick nötig. Ohne Klick werden keine Kursdaten von diesen Anbietern geladen.</p>
           </section>
-          <section aria-labelledby="privacy-test-area">
-            <h2 id="privacy-test-area">5. Testbereich für Ankaufbelege</h2>
-            <p>Der Zugang mit „Test“ und „Test“ ist ein offener Demo-Zugang ohne sichere Authentifizierung. Er ist ausschließlich für Testdaten gedacht. Der Browser speichert während der Sitzung nur eine Kennung für die Demo-Anmeldung im Sitzungsspeicher. Es wird kein Passwort gespeichert.</p>
-            <p>Hochgeladene Bilder und PDFs, Kameraaufnahmen, erkannter Text, eingegebene Belegdaten und die Unterschrift werden im aktuellen Browserfenster verarbeitet. Die OCR- und PDF-Bibliotheken werden von dieser Website geladen; für die Verarbeitung der Dokumente wird kein externer OCR-Dienst aufgerufen. Die Website übermittelt diese Dokumentdaten nicht an einen Server. Beim Schließen oder Neuladen der Seite gehen nicht exportierte Eingaben verloren.</p>
-            <p>Sie können den erzeugten PDF-Beleg mit den Dokumentkopien herunterladen oder freiwillig im lokalen Testarchiv dieses Browsers speichern. Das Archiv verschlüsselt PDF und personenbezogene Suchdaten vor dem Speichern mit einem von Ihnen gewählten Passwort. Die Belegnummer bleibt als lokaler Datensatzschlüssel sichtbar. Das Passwort wird nicht gespeichert. Bei Verlust des Passworts oder Löschung der Browserdaten ist das Archiv nicht wiederherstellbar; archivierte Belege können im Archiv einzeln gelöscht werden. Heruntergeladene PDF-Dateien verwalten und löschen Sie selbst auf Ihrem Gerät. Das lokale Testarchiv ersetzt keine geeignete betriebliche Aufbewahrung.</p>
-          </section>
           <section aria-labelledby="privacy-contact">
-            <h2 id="privacy-contact">6. Kontakt per E-Mail oder Telefon</h2>
+            <h2 id="privacy-contact">5. Kontakt per E-Mail oder Telefon</h2>
             <p>Auf der Website gibt es kein Kontaktformular. Wenn Sie uns per E-Mail oder Telefon kontaktieren, verarbeiten wir die von Ihnen mitgeteilten Angaben zur Bearbeitung Ihres Anliegens. Je nach Inhalt beruht dies auf vorvertraglichen Maßnahmen (Art. 6 Abs. 1 lit. b DSGVO) oder unserem berechtigten Interesse an der Beantwortung von Anfragen (Art. 6 Abs. 1 lit. f DSGVO). Gesetzliche Aufbewahrungspflichten bleiben unberührt.</p>
           </section>
           <section aria-labelledby="privacy-external">
-            <h2 id="privacy-external">7. Externe Links und Schriftarten</h2>
+            <h2 id="privacy-external">6. Externe Links und Schriftarten</h2>
             <p>Die Schriftarten werden von dieser Website selbst bereitgestellt. Eine Kartenansicht von Google Maps ist nicht eingebettet. Erst wenn Sie einen Link „Route ansehen“ anklicken, verlassen Sie diese Website und öffnen Google Maps; dort gelten die Datenschutzbestimmungen des jeweiligen Anbieters.</p>
           </section>
           <section aria-labelledby="privacy-rights">
-            <h2 id="privacy-rights">8. Ihre Rechte</h2>
+            <h2 id="privacy-rights">7. Ihre Rechte</h2>
             <p>Sie können im Rahmen der gesetzlichen Voraussetzungen Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung verlangen sowie der Verarbeitung widersprechen. Soweit anwendbar, besteht ein Recht auf Datenübertragbarkeit. Schreiben Sie dafür an <a href="mailto:info@juwelier-goek.de">info@juwelier-goek.de</a>.</p>
             <p>Sie haben zudem das Recht, sich bei einer Datenschutzaufsichtsbehörde zu beschweren. Für private Unternehmen in Bayern ist das <a href="https://www.lda.bayern.de/de/beschwerde.html" target="_blank" rel="noopener noreferrer">Bayerische Landesamt für Datenschutzaufsicht</a> zuständig.</p>
           </section>
         </div>
       </div>
     </main>
+
+    <div class="section-divider shell" aria-hidden="true"><span></span><i></i><span></span></div>
 
     <footer class="site-footer">
       <div class="footer-main shell">
