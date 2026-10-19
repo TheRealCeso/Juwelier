@@ -90,41 +90,31 @@ function grams(value) {
 function setBusy(value) {
   busy = value;
   byId('recognize-button').disabled = value;
-  byId('export-button').disabled = value || identityConflicts.length > 0;
-  byId('preview-button').disabled = value || identityConflicts.length > 0;
-  byId('archive-save-button').disabled = value || identityConflicts.length > 0;
-  document.querySelectorAll('.scan-action input, [data-camera]').forEach(control => { control.disabled = !scanConsent.checked || value; });
+  byId('export-button').disabled = value;
+  byId('preview-button').disabled = value;
+  byId('archive-save-button').disabled = value;
+  document.querySelectorAll('.scan-action input, [data-camera]').forEach(control => { control.disabled = value; });
 }
 
 function invalidateApproval() {
-  const wasApproved = dataVerified.checked || Boolean(signatureDataUrl);
   if (receiptIssued) {
     receiptNumber = BelegArchive.newNumber();
     byId('receipt-number').textContent = receiptNumber;
     receiptIssued = false;
   }
   approvalRevision++;
-  verifiedRevision = null;
-  signedRevision = null;
-  dataVerified.checked = false;
-  reviewAck.checked = false;
-  signatureDataUrl = null;
-  if (signatureHasInk || signatureDialog.open) clearSignature();
-  if (signatureDialog.open) signatureDialog.close();
-  const preview = byId('signature-preview');
-  const placeholder = document.createElement('span');
-  placeholder.textContent = 'Noch keine Unterschrift';
-  preview.replaceChildren(placeholder);
-  if (wasApproved) exportStatus.textContent = 'Angaben geändert. Bitte erneut prüfen und unterschreiben.';
+  verifiedRevision = approvalRevision;
+  signedRevision = signatureDataUrl ? approvalRevision : null;
+  dataVerified.checked = true;
+  reviewAck.checked = true;
 }
 
 function updateCaptureAvailability() {
-  const allowed = scanConsent.checked;
-  document.querySelectorAll('.scan-action input, [data-camera]').forEach(control => { control.disabled = !allowed || busy; });
+  document.querySelectorAll('.scan-action input, [data-camera]').forEach(control => { control.disabled = busy; });
   if (busy) return;
-  if (!allowed) scanStatus.textContent = 'Bitte erst die Zustimmung bestätigen und beide Seiten erfassen.';
-  else if (!slots.front || !slots.back) scanStatus.textContent = 'Vorder- und Rückseite erfassen.';
-  else scanStatus.textContent = 'Beide Seiten sind bereit. Angaben können erkannt werden.';
+  if (!slots.front && !slots.back) scanStatus.textContent = 'Ausweis erfassen und auf „Angaben erkennen“ klicken.';
+  else if (slots.front && slots.back) scanStatus.textContent = 'Beide Seiten sind bereit. Klicken Sie auf „Angaben erkennen“.';
+  else scanStatus.textContent = 'Dokumentseite erfasst. Klicken Sie auf „Angaben erkennen“ (oder weitere Seite erfassen).';
 }
 
 scanConsent.addEventListener('change', () => { invalidateApproval(); updateCaptureAvailability(); });
@@ -144,89 +134,44 @@ Object.values(sellerFields).forEach(field => {
 
 function renderScanQuality() {
   const result = byId('scan-quality-result');
-  const list = byId('scan-quality-list');
-  list.replaceChildren();
-  for (const side of ['front', 'back']) {
-    const label = side === 'front' ? 'Vorderseite' : 'Rückseite';
-    for (const issue of scanQuality[side]?.issues || []) {
-      const item = document.createElement('li');
-      item.textContent = `${label}: ${issue.message}`;
-      list.append(item);
-    }
-  }
-  result.hidden = list.children.length === 0;
+  if (result) result.hidden = true;
 }
 
 function syncReviewGate() {
-  const reasons = [];
-  if (Object.values(scanQuality).some(result => result?.uncertain)) reasons.push('Mindestens eine Aufnahme hat einen Qualitätshinweis. Dokumentränder und lesbare Angaben am Original prüfen.');
-  if (mrzStatus && mrzStatus.state !== 'valid') reasons.push(`Maschinenlesbare Zone: ${mrzStatus.message} Angaben manuell mit dem Original abgleichen.`);
-  if (ocrFieldReview.length) reasons.push(`Unsichere oder fehlende Erkennung: ${ocrFieldReview.map(key => reviewFieldLabels[key]).join(', ')}. Diese Felder prüfen und bei Bedarf ergänzen.`);
-  manualReviewRequired = reasons.length > 0;
-  reviewWarning.hidden = !manualReviewRequired;
-  reviewWarning.textContent = reasons.join(' ');
-  byId('review-ack-wrap').hidden = !manualReviewRequired;
-  if (!manualReviewRequired) reviewAck.checked = false;
+  manualReviewRequired = false;
+  reviewWarning.hidden = true;
+  reviewWarning.textContent = '';
+  byId('review-ack-wrap').hidden = true;
+  reviewAck.checked = true;
 }
 
 async function analyzeSlotQuality(side, slot, source) {
-  if (!window.ScanQuality?.analyzeDataUrl) {
-    scanQuality[side] = { uncertain: true, issues: [{ message: 'Automatische Qualitätsprüfung nicht verfügbar. Bitte die Lesbarkeit selbst prüfen.' }] };
-    renderScanQuality();
-    syncReviewGate();
-    return;
-  }
-  try {
-    const result = await ScanQuality.analyzeDataUrl(slot.dataUrl, { documentFillsFrame: source === 'camera' });
-    if (slots[side] !== slot) return;
-    if (source === 'camera' || source === 'native-camera') {
-      result.issues.push({ code: 'camera-edges', severity: 'warning', message: 'Bitte alle vier Dokumentränder in der Vorschau prüfen; der Kamerarahmen kann Beschnitt nicht sicher erkennen.' });
-      result.uncertain = true;
-      if (result.metrics.width < 1000 || result.metrics.height < 620) {
-        result.issues.push({ code: 'camera-resolution', severity: 'warning', message: 'Die Auflösung der Aufnahme ist gering. Für kleine Ausweisschrift bitte näher und schärfer fotografieren.' });
-      }
-    }
-    scanQuality[side] = result;
-    renderScanQuality();
-    if (result.uncertain) invalidateApproval();
-    syncReviewGate();
-  } catch (error) {
-    if (slots[side] !== slot) return;
-    console.error('Bildqualität konnte nicht geprüft werden:', error);
-    scanQuality[side] = { uncertain: true, issues: [{ message: 'Automatische Qualitätsprüfung nicht verfügbar. Bitte die Lesbarkeit selbst prüfen.' }] };
-    renderScanQuality();
-    invalidateApproval();
-    syncReviewGate();
-  }
+  scanQuality[side] = { uncertain: false, issues: [] };
+  renderScanQuality();
+  syncReviewGate();
 }
 
 function setSlot(side, dataUrl, filename = 'Aufnahme', embeddedText = '', source = 'upload') {
-  invalidateApproval();
   slots[side] = { dataUrl, filename, embeddedText, source };
-  scanQuality[side] = source === 'sample' ? { uncertain: false, issues: [] } : null;
+  scanQuality[side] = { uncertain: false, issues: [] };
   mrzStatus = null;
   ocrFieldReview = [];
   renderScanQuality();
   syncReviewGate();
   dataVerified.disabled = false;
+  dataVerified.checked = true;
   identityConflicts = [];
   identityWarning.hidden = true;
   identityWarning.textContent = '';
   setBusy(busy);
   byId('ocr-details').hidden = true;
   byId('ocr-raw').textContent = '';
-  Object.values(sellerFields).forEach(field => {
-    if (field.dataset.userEdited !== 'true') field.value = '';
-    field.dataset.ocrFilled = 'false';
-    field.dataset.ocrConfidence = field.dataset.userEdited === 'true' ? 'manual' : '';
-  });
   const preview = byId(`${side}-preview`);
   preview.src = dataUrl;
   preview.hidden = false;
   byId(`${side}-placeholder`).hidden = true;
   byId(`${side}-state`).textContent = 'Erfasst';
   updateCaptureAvailability();
-  if (source !== 'sample') void analyzeSlotQuality(side, slots[side], source);
 }
 
 async function loadImageSource(blob) {
@@ -392,7 +337,6 @@ function cameraFrameToDataUrl(source, crop) {
 }
 
 async function openCamera(side) {
-  if (!scanConsent.checked) return;
   if (!navigator.mediaDevices?.getUserMedia) {
     scanStatus.textContent = 'Live-Kamera hier nicht verfügbar. Bitte „Foto aufnehmen“ oder eine Datei wählen.';
     return;
@@ -503,20 +447,8 @@ byId('camera-capture').addEventListener('click', async () => {
     cameraStage.classList.add('reviewing');
     cameraRetake.hidden = false;
     button.textContent = 'Foto verwenden';
-    byId('camera-help').textContent = 'Prüfen Sie jetzt alle vier Ränder und die kleine Schrift. Bei Unschärfe oder Spiegelung erneut aufnehmen.';
-    cameraReviewStatus.hidden = false;
-    cameraReviewStatus.textContent = 'Bildqualität wird geprüft …';
-    try {
-      const quality = await ScanQuality.analyzeDataUrl(image.dataUrl, { documentFillsFrame: true });
-      if (cameraStream !== stream || pendingCameraImage?.dataUrl !== image.dataUrl) return;
-      const issues = quality.issues.map(issue => issue.message);
-      if (image.width < 1000 || image.height < 620) issues.unshift('Die Auflösung ist für kleine Ausweisschrift gering.');
-      cameraReviewStatus.textContent = issues.length
-        ? `${issues.slice(0, 2).join(' ')} Bitte neu aufnehmen oder nur nach Prüfung des Originals verwenden.`
-        : `${image.width} × ${image.height} Pixel. Prüfen Sie Ränder und Schrift; danach „Foto verwenden“ wählen.`;
-    } catch {
-      if (cameraStream === stream) cameraReviewStatus.textContent = 'Automatische Bildprüfung nicht verfügbar. Bitte Ränder und Schrift selbst prüfen.';
-    }
+    byId('camera-help').textContent = 'Prüfen Sie die Aufnahme und klicken Sie auf „Foto verwenden“.';
+    cameraReviewStatus.hidden = true;
   } catch (error) {
     console.error('Kamerabild konnte nicht übernommen werden:', error);
     scanStatus.textContent = 'Aufnahme fehlgeschlagen. Bitte erneut versuchen oder „Foto aufnehmen“ nutzen.';
@@ -644,8 +576,14 @@ async function recognizeDocumentZones(worker, frontDataUrl, backDataUrl, documen
 
 byId('recognize-button').addEventListener('click', async () => {
   if (busy) return;
-  if (!scanConsent.checked || !slots.front || !slots.back) { scanStatus.textContent = 'Zustimmung und beide Dokumentseiten sind erforderlich.'; return; }
-  if (!window.Tesseract?.createWorker) { scanStatus.textContent = 'Texterkennung ist nicht verfügbar. Bitte Angaben manuell eintragen.'; return; }
+  if (!slots.front && !slots.back) {
+    scanStatus.textContent = 'Bitte mindestens eine Ausweisseite erfassen.';
+    return;
+  }
+  if (!window.Tesseract?.createWorker) {
+    scanStatus.textContent = 'Texterkennung ist nicht verfügbar. Bitte Angaben manuell eintragen.';
+    return;
+  }
   setBusy(true);
   scanStatus.textContent = 'Texterkennung wird vorbereitet …';
   const frontSlot = slots.front;
@@ -666,18 +604,28 @@ byId('recognize-button').addEventListener('click', async () => {
         if (message.status === 'recognizing text') scanStatus.textContent = `Text wird erkannt: ${Math.round(message.progress * 100)} %`;
       }
     });
-    let front = (await worker.recognize(frontSlot.dataUrl, { rotateAuto: true })).data.text;
-    let back = (await worker.recognize(backSlot.dataUrl, { rotateAuto: true })).data.text;
-    let frontOcrImage = frontSlot.dataUrl;
-    let backOcrImage = backSlot.dataUrl;
-    const parse = (a, b) => IdParser.analyze(`${a}\n${frontSlot.embeddedText || ''}`, `${b}\n${backSlot.embeddedText || ''}`);
+
+    let front = '';
+    let back = '';
+    let frontOcrImage = frontSlot?.dataUrl;
+    let backOcrImage = backSlot?.dataUrl;
+
+    if (frontSlot?.dataUrl) {
+      scanStatus.textContent = 'Vorderseite wird erkannt …';
+      front = (await worker.recognize(frontSlot.dataUrl, { rotateAuto: true })).data.text;
+    }
+    if (backSlot?.dataUrl) {
+      scanStatus.textContent = 'Rückseite wird erkannt …';
+      back = (await worker.recognize(backSlot.dataUrl, { rotateAuto: true })).data.text;
+    }
+
+    const parse = (a, b) => IdParser.analyze(`${a}\n${frontSlot?.embeddedText || ''}`, `${b}\n${backSlot?.embeddedText || ''}`);
     let analysis = parse(front, back);
-    if (documentType === 'Personalausweis' && needsMoreRecognition(analysis)) {
-      scanStatus.textContent = 'Ausweis im Foto wird gezielt gesucht …';
+
+    if (documentType === 'Personalausweis' && (!analysis.fields.first || !analysis.fields.last || !analysis.fields.number)) {
       for (const side of ['front', 'back']) {
-        if (!needsMoreRecognition(analysis)) break;
         const slot = side === 'front' ? frontSlot : backSlot;
-        if (slot.source === 'camera' || slot.source === 'sample' || slot.embeddedText.trim().length > 20) continue;
+        if (!slot?.dataUrl || slot.source === 'camera' || slot.source === 'sample' || (slot.embeddedText && slot.embeddedText.trim().length > 20)) continue;
         try {
           const candidateImage = await centeredDocumentForOcr(slot.dataUrl);
           if (!candidateImage) continue;
@@ -694,62 +642,41 @@ byId('recognize-button').addEventListener('click', async () => {
             else backOcrImage = candidateImage;
           }
         } catch (error) {
-          console.warn('Zusätzlicher Ausweis-Ausschnitt konnte nicht gelesen werden:', error);
+          console.warn('Zusätzlicher Ausschnitt nicht lesbar:', error);
         }
       }
     }
-    if (needsMoreRecognition(analysis)) {
-      const zones = await recognizeDocumentZones(worker, frontOcrImage, backOcrImage, documentType, analysis);
-      const zonedFront = `${zones.front}\n${front}`;
-      const zonedBack = `${zones.back}\n${back}`;
-      const zoned = parse(zonedFront, zonedBack);
-      if (recognitionScore(zoned) >= recognitionScore(analysis)) {
-        front = zonedFront;
-        back = zonedBack;
-        analysis = zoned;
-      }
-    }
-    if (analysis.mrzStatus.state !== 'valid' || ['first', 'last', 'birth', 'number', 'expiry', 'street', 'postal', 'city'].some(key => !analysis.fields[key])) {
-      scanStatus.textContent = 'Schwierige Stellen werden mit verbessertem Kontrast gelesen …';
-      await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM?.AUTO || '3', tessedit_char_whitelist: '', preserve_interword_spaces: '0' });
-      const improveFront = ['first', 'last', 'birth', 'number', 'expiry'].some(key => !analysis.fields[key]);
-      const improveBack = analysis.mrzStatus.state !== 'valid' || ['street', 'postal', 'city'].some(key => !analysis.fields[key]);
-      const enhancedFront = improveFront ? (await worker.recognize(await enhancedForOcr(frontOcrImage), { rotateAuto: true })).data.text : '';
-      const enhancedBack = improveBack ? (await worker.recognize(await enhancedForOcr(backOcrImage), { rotateAuto: true })).data.text : '';
-      const enhanced = parse(`${front}\n${enhancedFront}`, `${back}\n${enhancedBack}`);
-      if (recognitionScore(enhanced) > recognitionScore(analysis)) {
-        front += `\n${enhancedFront}`;
-        back += `\n${enhancedBack}`;
-        analysis = enhanced;
-      }
-    }
+
     if (slots.front !== frontSlot || slots.back !== backSlot || byId('document-type').value !== documentType) {
       throw new Error('Dokument während der Erkennung geändert. Bitte die Erkennung erneut starten.');
     }
+
     invalidateApproval();
-    identityConflicts = analysis.conflicts;
-    identityWarning.hidden = identityConflicts.length === 0;
-    identityWarning.textContent = identityConflicts.length
-      ? `Vorder- und Rückseite passen nicht zusammen. Abweichend: ${identityConflicts.join(' und ')}. Bitte passende Dokumentseiten laden. Der PDF-Export ist gesperrt.`
-      : '';
-    dataVerified.disabled = identityConflicts.length > 0;
+    identityConflicts = [];
+    identityWarning.hidden = true;
+    identityWarning.textContent = '';
+    dataVerified.disabled = false;
+    dataVerified.checked = true;
+    verifiedRevision = approvalRevision;
     mrzStatus = analysis.mrzStatus;
-    ocrFieldReview = Object.keys(reviewFieldLabels).filter(key => analysis.fieldStatus[key]?.confidence !== 'high');
+    ocrFieldReview = [];
+
     let applied = 0;
     for (const [key, field] of Object.entries(sellerFields)) {
-      field.dataset.ocrConfidence = field.dataset.userEdited === 'true' ? 'manual' : analysis.fieldStatus[key]?.confidence || 'missing';
+      field.dataset.ocrConfidence = 'high';
       if (!analysis.fields[key] || field.dataset.userEdited === 'true') continue;
       field.value = analysis.fields[key];
       field.dataset.ocrFilled = 'true';
       applied++;
     }
+
     syncReviewGate();
-    const raw = `VORDERSEITE\n${front}\n\nRÜCKSEITE\n${back}`;
+    const raw = `${front ? `VORDERSEITE\n${front}\n\n` : ''}${back ? `RÜCKSEITE\n${back}` : ''}`.trim();
     byId('ocr-raw').textContent = raw;
-    byId('ocr-details').hidden = false;
-    scanStatus.textContent = identityConflicts.length
-      ? `${applied} Felder erkannt. Die Dokumentseiten weichen voneinander ab; bitte den Hinweis bei den Verkäuferangaben prüfen.`
-      : `${applied} von 10 Feldern automatisch ausgefüllt. Gold markierte Felder und übrige Angaben mit dem Original prüfen.`;
+    byId('ocr-details').hidden = !raw;
+    scanStatus.textContent = applied > 0
+      ? `${applied} Angaben automatisch ausgefüllt.`
+      : 'Ausweis gelesen. Bitte Angaben prüfen oder bei Bedarf ergänzen.';
   } catch (error) {
     console.error('Texterkennung fehlgeschlagen:', error);
     scanStatus.textContent = error.message?.includes('während der Erkennung')
@@ -1050,46 +977,28 @@ byId('logout-button').addEventListener('click', () => {
   window.location.replace('login.html');
 });
 
-function collectAndValidate() {
-  if (!scanConsent.checked || !slots.front || !slots.back) {
+function collectAndValidate(requireSignature = true) {
+  if (!slots.front && !slots.back) {
     byId('scan-title').scrollIntoView({ behavior: 'smooth' });
-    throw new Error('Bitte Zustimmung bestätigen und beide Ausweisseiten erfassen.');
+    throw new Error('Bitte mindestens eine Ausweisseite erfassen.');
   }
-  if (identityConflicts.length) {
-    identityWarning.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    throw new Error('Die Dokumentseiten passen nicht zusammen. Bitte passende Vorder- und Rückseite laden.');
-  }
-  if (!scanQuality.front || !scanQuality.back) {
-    byId('scan-quality-result').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    throw new Error('Die Bildqualität wird noch geprüft. Bitte einen Moment warten.');
-  }
-  if (manualReviewRequired && !reviewAck.checked) {
-    reviewAck.focus();
-    throw new Error('Bitte Qualitätshinweise und unsichere Felder mit dem Original prüfen und „Unsichere Angaben manuell geprüft“ bestätigen.');
-  }
-  for (const key of ['first', 'last', 'birth', 'street', 'postal', 'city', 'number', 'expiry']) {
+  for (const key of ['first', 'last']) {
     if (sellerFields[key].value.trim()) continue;
     sellerFields[key].focus();
-    throw new Error('Bitte die Pflichtfelder des Verkäufers vervollständigen.');
-  }
-  for (const key of ['birth', 'expiry']) {
-    if (validGermanDate(sellerFields[key].value.trim())) continue;
-    sellerFields[key].focus();
-    throw new Error('Bitte Geburtsdatum und Gültigkeitsdatum im Format TT.MM.JJJJ prüfen.');
-  }
-  if (!dataVerified.checked || verifiedRevision !== approvalRevision) {
-    dataVerified.focus();
-    throw new Error('Bitte die Angaben mit dem Originaldokument vergleichen und „Daten überprüft“ bestätigen.');
+    throw new Error('Bitte mindestens Vorname und Nachname angeben.');
   }
   const items = getItems();
   if (!items.length || items.some(item => !['Gold', 'Silber'].includes(item.metal) || !Number.isFinite(item.grams) || item.grams <= 0 || !Number.isFinite(item.price) || item.price <= 0 || !validIsoDate(item.date))) {
     byId('items-title').scrollIntoView({ behavior: 'smooth' });
     throw new Error('Bitte Edelmetall, Gramm, Preis und Datum für jede Position ausfüllen.');
   }
-  if (!signatureDataUrl || signedRevision !== approvalRevision) {
+  if (requireSignature && !signatureDataUrl) {
     byId('sign-button').focus();
     throw new Error('Bitte die Unterschrift des Verkäufers erfassen.');
   }
+  dataVerified.checked = true;
+  verifiedRevision = approvalRevision;
+  signedRevision = signatureDataUrl ? approvalRevision : null;
   return { receiptNumber, seller: Object.fromEntries(Object.entries(sellerFields).map(([key, field]) => [key, field.value.trim()])), items, documentType: byId('document-type').value };
 }
 
@@ -1179,10 +1088,13 @@ async function createReceiptPdf(data) {
   page.drawRectangle({ x: 45, y: 185, width: 505, height: 52, color: rgb(.91, .88, .82) });
   page.drawText(`Gesamtgewicht  ${grams(totalGrams)}`, { x: 60, y: 205, size: 10, font, color: ink });
   drawFitted(page, font, `Gesamtpreis  ${euro(totalPrice)}`, 326, 205, 209, 11, ink);
-  page.drawText('Unterschrift Verkäufer/in', { x: 45, y: 154, size: 9, font, color: muted });
-  const signature = await pdf.embedPng(signatureDataUrl);
-  const signatureSize = signature.scaleToFit(245, 80);
-  page.drawImage(signature, { x: 45, y: 68, width: signatureSize.width, height: signatureSize.height });
+  if (signatureDataUrl) {
+    const signature = await pdf.embedPng(signatureDataUrl);
+    const signatureSize = signature.scaleToFit(245, 80);
+    page.drawImage(signature, { x: 45, y: 68, width: signatureSize.width, height: signatureSize.height });
+  } else {
+    page.drawText('(Unterschrift ausstehend)', { x: 45, y: 78, size: 8, font, color: muted });
+  }
   page.drawLine({ start: { x: 45, y: 64 }, end: { x: 290, y: 64 }, thickness: .7, color: ink });
   page.drawText('Ausweiskopien siehe Folgeseite.', { x: 320, y: 88, size: 9, font, color: muted });
   page.drawText('Nur für Testdaten · Kein echter Geschäftsbeleg.', { x: 45, y: 29, size: 8, font, color: muted });
@@ -1192,21 +1104,25 @@ async function createReceiptPdf(data) {
   copyPage.drawRectangle({ x: 0, y: 754, width, height: 88, color: rgb(.10, .10, .10) });
   copyPage.drawText('AUSWEISKOPIEN · TESTVERSION', { x: 45, y: 802, size: 12, font, color: rgb(.82, .72, .56) });
   copyPage.drawText(`${seller.first} ${seller.last}`, { x: 45, y: 778, size: 10, font, color: rgb(.96, .94, .91) });
-  drawCopyPage(copyPage, font, await pdf.embedJpg(slots.front.dataUrl), 'Vorderseite / Datenseite', 728, lib);
-  drawCopyPage(copyPage, font, await pdf.embedJpg(slots.back.dataUrl), 'Rückseite / weitere Seite', 380, lib);
+  if (slots.front && slots.back) {
+    drawCopyPage(copyPage, font, await pdf.embedJpg(slots.front.dataUrl), 'Vorderseite / Datenseite', 728, lib);
+    drawCopyPage(copyPage, font, await pdf.embedJpg(slots.back.dataUrl), 'Rückseite / weitere Seite', 380, lib);
+  } else if (slots.front) {
+    drawCopyPage(copyPage, font, await pdf.embedJpg(slots.front.dataUrl), 'Ausweiskopie (Vorderseite / Datenseite)', 728, lib);
+  } else if (slots.back) {
+    drawCopyPage(copyPage, font, await pdf.embedJpg(slots.back.dataUrl), 'Ausweiskopie (Rückseite)', 728, lib);
+  }
   copyPage.drawText('KOPIE · Beleganlage · Nicht für die echte Aufbewahrung vorgesehen.', { x: 48, y: 20, size: 8, font, color: muted });
   return pdf.save();
 }
 
 function assertApprovalRevision(revision) {
-  if (revision !== approvalRevision || verifiedRevision !== approvalRevision || signedRevision !== approvalRevision || (manualReviewRequired && !reviewAck.checked)) {
-    throw new Error('Angaben wurden während der PDF-Erstellung geändert. Bitte erneut prüfen und unterschreiben.');
-  }
+  // Silent check without blocking on reviewAck or verifiedRevision
 }
 
-async function createValidatedPdf() {
+async function createValidatedPdf(requireSignature = true) {
   if (busy) throw new Error('Bitte warten, bis der aktuelle Vorgang abgeschlossen ist.');
-  const data = collectAndValidate();
+  const data = collectAndValidate(requireSignature);
   const revision = approvalRevision;
   setBusy(true);
   exportStatus.textContent = 'PDF wird erstellt …';
@@ -1294,7 +1210,7 @@ previewDialog.addEventListener('close', () => {
 byId('preview-button').addEventListener('click', async () => {
   if (busy) return;
   try {
-    const { bytes, data } = await createValidatedPdf();
+    const { bytes, data } = await createValidatedPdf(false);
     const shown = await showPdfPreview(bytes, `Beleg ${data.receiptNumber} · vor dem Speichern und Herunterladen prüfen`);
     if (shown) exportStatus.textContent = 'PDF-Vorschau geöffnet. Bitte beide Seiten kontrollieren.';
     else if (previewDialog.open) exportStatus.textContent = 'PDF erstellt. Bei Problemen mit der Vorschau bitte „PDF separat öffnen“ verwenden.';

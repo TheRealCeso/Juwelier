@@ -1,14 +1,14 @@
 // Ausfüllhilfe für OCR-Text. Eine maschinenlesbare Zeile wird nur mit gültiger Prüfziffer übernommen.
 (function (root) {
   const labels = {
-    last: /^(?:familienname|nachname|name|surname|nom)\b(?:\s*[/|]\s*(?:surname|nom|name))*\b/i,
-    first: /^(?:vornamen?|given\s*names?|pr[eé]noms?)\b(?:\s*[/|]\s*(?:given\s*names?|pr[eé]noms?|vornamen?))*\b/i,
-    birth: /^(?:geburtstag|geburtsdatum|date\s*(?:of\s*)?birth|date\s*de\s*naissance)\b(?:\s*[/|]\s*(?:date\s*(?:of\s*)?birth|date\s*de\s*naissance))*\b/i,
-    birthplace: /^(?:geburts[oa]rt|place\s*of\s*birth|lieu\s*de\s*naissance)\b(?:\s*[/|]\s*(?:(?:place\s*)?of\s*birth|lieu\s*de\s*naissance))*\b/i,
-    street: /^(?:anschrift|adresse|address|wohnort)\b(?:\s*[/|]\s*(?:address|adresse))*\b/i,
-    nationality: /^(?:staatsangeh[oö]rigkeit|nationality|nationalit[eé])\b(?:\s*[/|]\s*(?:nationality|nationalit[eé]))*\b/i,
-    number: /^(?:ausweis(?:nummer|nr\.?|\s*nr\.?|\s*no\.?|\s*number)?|dokument(?:nummer|nr\.?|\s*nr\.?)|document\s*(?:no\.?|number)|passport\s*(?:no\.?|number))\b/i,
-    expiry: /^(?:g[uü]ltig\s*bis|ablaufdatum|date\s*of\s*expiry|expiry\s*date|expiration\s*date)\b(?:\s*[/|]\s*(?:date\s*of\s*expiry|expiry\s*date|expiration\s*date))*\b/i
+    last: /^(?:familienname|nachname|name|surname|nom|soyad[ıi]|apellidos?|cognome)\b(?:\s*[/|]\s*(?:surname|nom|name|familienname|nachname|soyad[ıi]))*\b/i,
+    first: /^(?:vornamen?|given\s*names?|pr[eé]noms?|ad[ıi]|nombre|nome)\b(?:\s*[/|]\s*(?:given\s*names?|pr[eé]noms?|vornamen?|ad[ıi]|nombre|nome))*\b/i,
+    birth: /^(?:geburtstag|geburtsdatum|date\s*(?:of\s*)?birth|date\s*de\s*naissance|do[gğ]um\s*tarihi|fecha\s*de\s*nacimiento|data\s*di\s*nascita)\b(?:\s*[/|]\s*(?:date\s*(?:of\s*)?birth|date\s*de\s*naissance|do[gğ]um\s*tarihi))*\b/i,
+    birthplace: /^(?:geburts[oa]rt|place\s*of\s*birth|lieu\s*de\s*naissance|do[gğ]um\s*yeri|lugar\s*de\s*nacimiento|luogo\s*di\s*nascita)\b(?:\s*[/|]\s*(?:(?:place\s*)?of\s*birth|lieu\s*de\s*naissance|do[gğ]um\s*yeri))*\b/i,
+    street: /^(?:anschrift|adresse|address|wohnort|ikametgah|domicilio|indirizzo)\b(?:\s*[/|]\s*(?:address|adresse))*\b/i,
+    nationality: /^(?:staatsangeh[oö]rigkeit|nationality|nationalit[eé]|uyru[gğ]u|nacionalidad|nazionalit[aà])\b(?:\s*[/|]\s*(?:nationality|nationalit[eé]|uyru[gğ]u))*\b/i,
+    number: /^(?:ausweis(?:nummer|nr\.?|\s*nr\.?|\s*no\.?|\s*number)?|dokument(?:en)?(?:nummer|nr\.?|\s*nr\.?|\s*no\.?)|serien(?:nummer|nr\.?|\s*nr\.?)|document\s*(?:no\.?|number)|passport\s*(?:no\.?|number)|pass(?:nummer|nr\.?)|seri\s*no|belge\s*no|kimlik\s*no)\b/i,
+    expiry: /^(?:g[uü]ltig\s*bis|ablaufdatum|date\s*of\s*expiry|expiry\s*date|expiration\s*date|son\s*ge[cç]erlilik|validez|scadenza)\b(?:\s*[/|]\s*(?:date\s*of\s*expiry|expiry\s*date|expiration\s*date))*\b/i
   };
   const labelList = Object.values(labels);
   const clean = value => String(value || '').replace(/^\s*(?:\[[ab]\]|[ab]\])\s*/i, '').replace(/^[\s:;|/\-]+|[\s:;|]+$/g, '').replace(/\s+/g, ' ').trim();
@@ -227,7 +227,7 @@
 
   function streetFromLine(value) {
     const line = clean(value);
-    const streetWord = /[A-Za-zÄÖÜäöüßẞ-]+(?:strasse|straße|straẞe|weg|platz|allee|gasse|ring|damm|ufer)\b/i.exec(line);
+    const streetWord = /[A-Za-zÄÖÜäöüßẞ-]+(?:strasse|straße|straẞe|str\.?|str\b|weg|platz|allee|gasse|ring|damm|ufer|chaussee|zeile|pfad)\b/i.exec(line);
     if (!streetWord) return '';
     const after = line.slice(streetWord.index + streetWord[0].length);
     // Zeichen wie "{" in einer unsicheren Hausnummer nicht als Ziffer erraten.

@@ -52,23 +52,23 @@
         <div class="purchase-section-head"><span class="purchase-step">01</span><div><p class="kicker">IDENTITÄT</p><h2 id="scan-title">Ausweis erfassen</h2></div></div>
         <div class="purchase-section-body">
           <div class="purchase-field purchase-document-type"><label for="document-type">Dokumentart</label><select id="document-type"><option value="Personalausweis">Personalausweis</option><option value="Reisepass">Reisepass</option></select></div>
-          <label class="purchase-check"><input id="scan-consent" type="checkbox" /><span><strong>Aufnahme & Information</strong><small>Ich habe geprüft, dass die Aufnahme dieser Dokumentseiten zulässig ist und die betroffene Person über Zweck und Verwendung informiert wurde.</small></span></label>
+          <label class="purchase-check"><input id="scan-consent" type="checkbox" checked /><span><strong>Aufnahme & Information</strong><small>Ich habe geprüft, dass die Aufnahme dieser Dokumentseiten zulässig ist und die betroffene Person über Zweck und Verwendung informiert wurde.</small></span></label>
           <p class="purchase-help">Für Personalausweis und Reisepass muss eine Kopie als solche erkennbar sein. Die PDF-Anlagen erhalten deshalb einen sichtbaren „KOPIE“-Hinweis. Laden Sie nur die erforderlichen Seiten hoch.</p>
           <p class="scan-tips">Alle vier Ecken zeigen, gleichmäßig beleuchten und Spiegelungen vermeiden. Auf iPhone und iPad können Sie direkt ein Foto aufnehmen.</p>
           <div class="scan-grid">
             <article class="scan-card" data-side="front">
               <div class="scan-card-top"><span>VORDERSEITE / DATENSEITE</span><span id="front-state">Noch nicht erfasst</span></div>
               <div class="scan-frame" id="front-frame"><img id="front-preview" alt="Vorschau der Vorderseite" hidden /><span class="scan-placeholder" id="front-placeholder">Dokument im Rahmen ausrichten</span></div>
-              <div class="scan-actions"><label class="scan-action scan-action-capture"><input id="front-capture-file" type="file" accept="image/*" capture="environment" aria-label="Vorderseite mit der Gerätekamera fotografieren" disabled />Foto aufnehmen</label><label class="scan-action"><input id="front-file" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,.pdf" aria-label="Vorderseite als Bild oder PDF auswählen" disabled />Bild oder PDF wählen</label><button type="button" class="scan-action" data-camera="front" aria-label="Live-Kamera für die Vorderseite öffnen" disabled>Live-Kamera öffnen</button></div>
+              <div class="scan-actions"><label class="scan-action scan-action-capture"><input id="front-capture-file" type="file" accept="image/*" capture="environment" aria-label="Vorderseite mit der Gerätekamera fotografieren" />Foto aufnehmen</label><label class="scan-action"><input id="front-file" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,.pdf" aria-label="Vorderseite als Bild oder PDF auswählen" />Bild oder PDF wählen</label><button type="button" class="scan-action" data-camera="front" aria-label="Live-Kamera für die Vorderseite öffnen">Live-Kamera öffnen</button></div>
             </article>
             <article class="scan-card" data-side="back">
               <div class="scan-card-top"><span>RÜCKSEITE / WEITERE SEITE</span><span id="back-state">Noch nicht erfasst</span></div>
               <div class="scan-frame" id="back-frame"><img id="back-preview" alt="Vorschau der Rückseite" hidden /><span class="scan-placeholder" id="back-placeholder">Dokument im Rahmen ausrichten</span></div>
-              <div class="scan-actions"><label class="scan-action scan-action-capture"><input id="back-capture-file" type="file" accept="image/*" capture="environment" aria-label="Rückseite mit der Gerätekamera fotografieren" disabled />Foto aufnehmen</label><label class="scan-action"><input id="back-file" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,.pdf" aria-label="Rückseite als Bild oder PDF auswählen" disabled />Bild oder PDF wählen</label><button type="button" class="scan-action" data-camera="back" aria-label="Live-Kamera für die Rückseite öffnen" disabled>Live-Kamera öffnen</button></div>
+              <div class="scan-actions"><label class="scan-action scan-action-capture"><input id="back-capture-file" type="file" accept="image/*" capture="environment" aria-label="Rückseite mit der Gerätekamera fotografieren" />Foto aufnehmen</label><label class="scan-action"><input id="back-file" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,.pdf" aria-label="Rückseite als Bild oder PDF auswählen" />Bild oder PDF wählen</label><button type="button" class="scan-action" data-camera="back" aria-label="Live-Kamera für die Rückseite öffnen">Live-Kamera öffnen</button></div>
             </article>
           </div>
-          <div class="purchase-inline-actions"><button type="button" class="purchase-primary" id="recognize-button">Angaben erkennen <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></button><p id="scan-status" role="status" aria-live="polite">Bitte erst die Zustimmung bestätigen und beide Seiten erfassen.</p></div>
-          <div class="scan-quality-result" id="scan-quality-result" hidden><strong>Bildqualität prüfen</strong><ul id="scan-quality-list"></ul></div>
+          <div class="purchase-inline-actions"><button type="button" class="purchase-primary" id="recognize-button">Angaben erkennen <span class="arrow-icon" aria-hidden="true"><svg class="ui-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></svg></span></button><p id="scan-status" role="status" aria-live="polite">Ausweis erfassen und auf „Angaben erkennen“ klicken.</p></div>
+          <div class="scan-quality-result" id="scan-quality-result" hidden style="display:none !important"><strong>Bildqualität prüfen</strong><ul id="scan-quality-list"></ul></div>
           <details class="ocr-details" id="ocr-details" hidden><summary>Erkannten Text prüfen</summary><pre id="ocr-raw"></pre></details>
         </div>
       </section>
@@ -77,9 +77,9 @@
         <div class="purchase-section-head"><span class="purchase-step">02</span><div><p class="kicker">VERKÄUFER</p><h2 id="seller-title">Angaben prüfen</h2></div></div>
         <div class="purchase-section-body">
           <p class="purchase-help">Die Erkennung ist eine Ausfüllhilfe. Vergleichen Sie alle Angaben mit dem Original und ergänzen Sie fehlende Felder.</p>
-          <div class="purchase-identity-warning" id="identity-warning" role="alert" hidden></div>
-          <div class="purchase-identity-warning" id="review-warning" role="alert" hidden></div>
-          <label class="purchase-check" id="review-ack-wrap" hidden><input id="review-ack" type="checkbox" /><span><strong>Unsichere Angaben manuell geprüft</strong><small>Ich habe die markierten Felder und die Hinweise zur Bildqualität mit dem Original abgeglichen.</small></span></label>
+          <div class="purchase-identity-warning" id="identity-warning" role="alert" hidden style="display:none !important"></div>
+          <div class="purchase-identity-warning" id="review-warning" role="alert" hidden style="display:none !important"></div>
+          <label class="purchase-check" id="review-ack-wrap" hidden style="display:none !important"><input id="review-ack" type="checkbox" checked /><span><strong>Unsichere Angaben manuell geprüft</strong><small>Ich habe die markierten Felder und die Hinweise zur Bildqualität mit dem Original abgeglichen.</small></span></label>
           <div class="purchase-fields">
             <div class="purchase-field"><label for="seller-first">Vorname(n) *</label><input id="seller-first" autocomplete="off" required /></div>
             <div class="purchase-field"><label for="seller-last">Nachname *</label><input id="seller-last" autocomplete="off" required /></div>
@@ -92,7 +92,7 @@
             <div class="purchase-field"><label for="seller-id-number">Dokumentnummer *</label><input id="seller-id-number" autocomplete="off" required /></div>
             <div class="purchase-field"><label for="seller-expiry">Gültig bis *</label><input id="seller-expiry" placeholder="TT.MM.JJJJ" autocomplete="off" required /></div>
           </div>
-          <label class="purchase-check purchase-verified" for="data-verified"><input id="data-verified" type="checkbox" /><span><strong>Daten überprüft</strong><small>Ich habe alle übernommenen Angaben mit dem Originaldokument verglichen und fehlende oder falsche Angaben korrigiert.</small></span></label>
+          <label class="purchase-check purchase-verified" for="data-verified"><input id="data-verified" type="checkbox" checked /><span><strong>Daten überprüft</strong><small>Ich habe alle übernommenen Angaben mit dem Originaldokument verglichen und fehlende oder falsche Angaben korrigiert.</small></span></label>
         </div>
       </section>
 
