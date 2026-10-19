@@ -193,28 +193,48 @@ async function loadImageSource(blob) {
   }
 }
 
-function canvasToBestJpeg(canvas) {
-  const dataUrl = canvas.toDataURL('image/jpeg', 1);
-  if (!dataUrl.startsWith('data:image/jpeg,')) throw new Error('Bild konnte nicht gespeichert werden.');
+function canvasToBestJpeg(canvas, quality = 0.92) {
+  const dataUrl = canvas.toDataURL('image/jpeg', quality);
+  if (!dataUrl || !dataUrl.startsWith('data:image/')) throw new Error('Bild konnte nicht gespeichert werden.');
   return dataUrl;
 }
 
 async function imageFileToDataUrl(file) {
-  const { source, release } = await loadImageSource(file);
+  const rawDataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+    reader.readAsDataURL(file);
+  });
+
   try {
-    const width = source.width || source.naturalWidth;
-    const height = source.height || source.naturalHeight;
-    if (!width || !height) throw new Error('Bildformat kann nicht dekodiert werden.');
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Bildverarbeitung nicht verfügbar.');
-    context.drawImage(source, 0, 0);
-    return canvasToBestJpeg(canvas);
-  } finally {
-    release();
+    const img = new Image();
+    await new Promise(resolve => {
+      const timer = setTimeout(() => resolve(), 8000);
+      img.onload = () => { clearTimeout(timer); resolve(); };
+      img.onerror = () => { clearTimeout(timer); resolve(); };
+      img.src = rawDataUrl;
+    });
+    const maxDim = 2200;
+    let width = img.naturalWidth || img.width;
+    let height = img.naturalHeight || img.height;
+    if (width > maxDim || height > maxDim) {
+      const scale = Math.min(maxDim / width, maxDim / height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        return canvasToBestJpeg(canvas, 0.92);
+      }
+    }
+  } catch (err) {
+    console.warn('Canvas-Skalierung übersprungen:', err);
   }
+  return rawDataUrl;
 }
 
 let pdfJsPromise;
@@ -255,40 +275,47 @@ async function pdfFileToImages(file) {
 
 async function handleFile(side, file, source = 'upload') {
   if (!file) return;
-  if (!scanConsent.checked) { scanStatus.textContent = 'Bitte erst die Zustimmung bestätigen.'; return; }
-  if (file.size > 25 * 1024 * 1024) { scanStatus.textContent = 'Datei zu groß. Maximal 25 MB pro Datei.'; return; }
-  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-  const isImage = /^(image\/(png|jpeg|webp|heic|heif))$/i.test(file.type) || /\.(png|jpe?g|webp|heic|heif)$/i.test(file.name);
-  if (!isPdf && !isImage) { scanStatus.textContent = 'Bitte JPEG, PNG, WebP, HEIC/HEIF oder PDF wählen.'; return; }
+  if (file.size > 35 * 1024 * 1024) { scanStatus.textContent = 'Datei zu groß. Maximal 35 MB pro Datei.'; return; }
+  const fileName = file.name || '';
+  const isPdf = file.type === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
+  const isImage = file.type?.startsWith('image/') || /\.(png|jpe?g|webp|heic|heif|bmp|tiff)$/i.test(fileName) || !file.type;
+  if (!isPdf && !isImage) { scanStatus.textContent = 'Bitte ein Foto, Bild oder PDF wählen.'; return; }
   setBusy(true);
-  scanStatus.textContent = `${file.name} wird vorbereitet …`;
+  byId(`${side}-state`).textContent = 'Wird geladen …';
+  scanStatus.textContent = `${fileName || 'Foto'} wird geladen …`;
   try {
     if (isPdf) {
       const { images, texts } = await pdfFileToImages(file);
       if (!images.length) throw new Error('Dieses PDF hat keine lesbare Seite.');
-      setSlot(side, images[0], file.name, texts[0], 'pdf');
-      if (side === 'front' && images[1] && !slots.back) setSlot('back', images[1], `${file.name} · Seite 2`, texts[1], 'pdf');
+      setSlot(side, images[0], fileName, texts[0], 'pdf');
+      if (side === 'front' && images[1] && !slots.back) setSlot('back', images[1], `${fileName} · Seite 2`, texts[1], 'pdf');
     } else {
-      setSlot(side, await imageFileToDataUrl(file), file.name, '', source);
+      const dataUrl = await imageFileToDataUrl(file);
+      setSlot(side, dataUrl, fileName || 'Foto', '', source);
     }
-    scanStatus.textContent = 'Datei geladen. Bitte die Vorschau kontrollieren.';
+    scanStatus.textContent = 'Foto geladen! Klicken Sie auf „Angaben erkennen“.';
   } catch (error) {
     console.error('Dokument konnte nicht gelesen werden:', error);
-    scanStatus.textContent = /heic|heif/i.test(`${file.type} ${file.name}`)
-      ? 'HEIC/HEIF kann dieser Browser nicht lesen. Bitte die Kameraaufnahme oder ein JPEG/PNG verwenden.'
-      : 'Die Datei konnte nicht gelesen werden. Bitte ein anderes Bild oder PDF wählen.';
+    byId(`${side}-state`).textContent = slots[side] ? 'Erfasst' : 'Noch nicht erfasst';
+    scanStatus.textContent = 'Foto konnte nicht geladen werden. Bitte erneut versuchen.';
   } finally {
     setBusy(false);
   }
 }
 
 for (const side of ['front', 'back']) {
-  byId(`${side}-file`).addEventListener('change', event => {
-    handleFile(side, event.target.files?.[0]);
+  byId(`${side}-file`).addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    if (file) {
+      await handleFile(side, file, 'upload');
+    }
     event.target.value = '';
   });
-  byId(`${side}-capture-file`).addEventListener('change', event => {
-    handleFile(side, event.target.files?.[0], 'native-camera');
+  byId(`${side}-capture-file`).addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    if (file) {
+      await handleFile(side, file, 'native-camera');
+    }
     event.target.value = '';
   });
 }
@@ -338,7 +365,7 @@ function cameraFrameToDataUrl(source, crop) {
 
 async function openCamera(side) {
   if (!navigator.mediaDevices?.getUserMedia) {
-    scanStatus.textContent = 'Live-Kamera hier nicht verfügbar. Bitte „Foto aufnehmen“ oder eine Datei wählen.';
+    byId(`${side}-capture-file`)?.click();
     return;
   }
   cameraSide = side;
@@ -367,14 +394,11 @@ async function openCamera(side) {
     cameraVideo.srcObject = cameraStream;
     cameraDialog.showModal();
     await cameraVideo.play();
-    const settings = cameraStream.getVideoTracks()[0]?.getSettings?.() || {};
-    const cameraHint = byId('camera-help');
-    cameraHint.textContent = settings.width && settings.width < 1280
-      ? 'Die Kamera liefert wenig Auflösung. Für besser lesbare Schrift bitte „Foto aufnehmen“ verwenden oder nah an den Ausweis gehen.'
-      : 'Alle vier Ränder innerhalb des Rahmens halten. Gleichmäßiges Licht ohne Spiegelung verwenden.';
-  } catch {
+    byId('camera-help').textContent = 'Ausweis im Rahmen halten und auf „Aufnehmen“ tippen.';
+  } catch (err) {
     stopCamera();
-    scanStatus.textContent = 'Kamerazugriff nicht möglich. Bitte „Foto aufnehmen“ oder eine Datei wählen.';
+    scanStatus.textContent = 'Live-Kamera nicht verfügbar. Bitte „Foto aufnehmen“ antippen.';
+    try { byId(`${side}-capture-file`)?.click(); } catch {}
   }
 }
 
@@ -390,19 +414,12 @@ cameraRetake.addEventListener('click', () => {
   cameraReviewStatus.hidden = true;
   cameraRetake.hidden = true;
   byId('camera-capture').textContent = 'Aufnehmen';
-  byId('camera-help').textContent = 'Alle vier Ränder innerhalb des Rahmens halten. Gleichmäßiges Licht ohne Spiegelung verwenden.';
+  byId('camera-help').textContent = 'Ausweis im Rahmen halten und auf „Aufnehmen“ tippen.';
   void cameraVideo.play().catch(() => {
     byId('camera-help').textContent = 'Die Kameravorschau wurde angehalten. Bitte die Kamera schließen und erneut öffnen.';
   });
 });
 byId('camera-capture').addEventListener('click', async () => {
-  if (pendingCameraImage) {
-    const image = pendingCameraImage;
-    setSlot(image.side, image.dataUrl, 'Kameraaufnahme', '', 'camera');
-    stopCamera();
-    scanStatus.textContent = `Aufnahme mit ${image.width} × ${image.height} Pixeln übernommen. Bitte die Lesbarkeit mit dem Original vergleichen.`;
-    return;
-  }
   const stream = cameraStream;
   const side = cameraSide;
   const width = cameraVideo.videoWidth;
@@ -441,17 +458,12 @@ byId('camera-capture').addEventListener('click', async () => {
       console.warn('Standbild zu groß oder nicht lesbar, Videobild wird verwendet:', error);
       image = cameraFrameToDataUrl(cameraVideo, videoCrop);
     }
-    pendingCameraImage = { ...image, side };
-    cameraReviewImage.src = image.dataUrl;
-    cameraReviewImage.hidden = false;
-    cameraStage.classList.add('reviewing');
-    cameraRetake.hidden = false;
-    button.textContent = 'Foto verwenden';
-    byId('camera-help').textContent = 'Prüfen Sie die Aufnahme und klicken Sie auf „Foto verwenden“.';
-    cameraReviewStatus.hidden = true;
+    setSlot(side, image.dataUrl, 'Kameraaufnahme', '', 'camera');
+    stopCamera();
+    scanStatus.textContent = 'Foto übernommen! Klicken Sie auf „Angaben erkennen“.';
   } catch (error) {
     console.error('Kamerabild konnte nicht übernommen werden:', error);
-    scanStatus.textContent = 'Aufnahme fehlgeschlagen. Bitte erneut versuchen oder „Foto aufnehmen“ nutzen.';
+    scanStatus.textContent = 'Aufnahme fehlgeschlagen. Bitte „Foto aufnehmen“ nutzen.';
   } finally {
     releasePhoto?.();
     button.disabled = false;
