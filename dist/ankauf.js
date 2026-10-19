@@ -282,6 +282,7 @@ async function handleFile(side, file, source = 'upload') {
   if (!isPdf && !isImage) { scanStatus.textContent = 'Bitte ein Foto, Bild oder PDF wählen.'; return; }
   setBusy(true);
   byId(`${side}-state`).textContent = 'Wird geladen …';
+  byId(`${side}-frame`)?.closest('.scan-card')?.classList.add('scan-card--loading');
   scanStatus.textContent = `${fileName || 'Foto'} wird geladen …`;
   try {
     if (isPdf) {
@@ -299,6 +300,7 @@ async function handleFile(side, file, source = 'upload') {
     byId(`${side}-state`).textContent = slots[side] ? 'Erfasst' : 'Noch nicht erfasst';
     scanStatus.textContent = 'Foto konnte nicht geladen werden. Bitte erneut versuchen.';
   } finally {
+    byId(`${side}-frame`)?.closest('.scan-card')?.classList.remove('scan-card--loading');
     setBusy(false);
   }
 }
@@ -473,18 +475,61 @@ window.addEventListener('pagehide', stopCamera);
 
 async function enhancedForOcr(dataUrl) {
   const image = new Image();
-  image.src = dataUrl;
-  await image.decode();
+  await new Promise(resolve => {
+    image.onload = resolve;
+    image.onerror = resolve;
+    image.src = dataUrl;
+  });
+  const w = image.naturalWidth || image.width;
+  const h = image.naturalHeight || image.height;
+  if (!w || !h) return dataUrl;
   const canvas = document.createElement('canvas');
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
+  canvas.width = w;
+  canvas.height = h;
   const context = canvas.getContext('2d', { willReadFrequently: true });
   context.drawImage(image, 0, 0);
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-  for (let index = 0; index < pixels.data.length; index += 4) {
-    const luminance = .299 * pixels.data[index] + .587 * pixels.data[index + 1] + .114 * pixels.data[index + 2];
-    const value = Math.max(0, Math.min(255, (luminance - 128) * 1.35 + 128));
-    pixels.data[index] = pixels.data[index + 1] = pixels.data[index + 2] = value;
+  const pixels = context.getImageData(0, 0, w, h);
+  const data = pixels.data;
+  // Step 1: Greyscale
+  const grey = new Uint8Array(w * h);
+  for (let i = 0; i < data.length; i += 4) {
+    grey[i >> 2] = Math.round(.299 * data[i] + .587 * data[i + 1] + .114 * data[i + 2]);
+  }
+  // Step 2: Percentile contrast stretch (p2–p98)
+  const hist = new Int32Array(256);
+  for (const v of grey) hist[v]++;
+  const total = w * h;
+  let lo = 0, hi = 255, cumLo = 0, cumHi = 0;
+  for (let v = 0; v < 256; v++) { cumLo += hist[v]; if (cumLo >= total * 0.02) { lo = v; break; } }
+  for (let v = 255; v >= 0; v--) { cumHi += hist[v]; if (cumHi >= total * 0.02) { hi = v; break; } }
+  if (hi <= lo) { lo = 0; hi = 255; }
+  const range = hi - lo || 1;
+  const stretched = new Uint8Array(w * h);
+  for (let i = 0; i < grey.length; i++) {
+    stretched[i] = Math.max(0, Math.min(255, Math.round((grey[i] - lo) * 255 / range)));
+  }
+  // Step 3: Unsharp mask (3x3 Gaussian blur then add high-frequency detail back)
+  const blurred = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let sum = 0, weight = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          const ny = Math.max(0, Math.min(h - 1, y + ky));
+          const nx = Math.max(0, Math.min(w - 1, x + kx));
+          const k = [1,2,1,2,4,2,1,2,1][(ky+1)*3+(kx+1)];
+          sum += stretched[ny * w + nx] * k;
+          weight += k;
+        }
+      }
+      blurred[y * w + x] = Math.round(sum / weight);
+    }
+  }
+  for (let i = 0; i < stretched.length; i++) {
+    const v = Math.max(0, Math.min(255, Math.round(stretched[i] + 0.7 * (stretched[i] - blurred[i]))));
+    const idx = i * 4;
+    data[idx] = data[idx + 1] = data[idx + 2] = v;
+    data[idx + 3] = 255;
   }
   context.putImageData(pixels, 0, 0);
   return canvas.toDataURL('image/png');
@@ -623,12 +668,16 @@ byId('recognize-button').addEventListener('click', async () => {
     let backOcrImage = backSlot?.dataUrl;
 
     if (frontSlot?.dataUrl) {
+      scanStatus.textContent = 'Vorderseite wird vorbereitet …';
+      const frontEnhanced = await enhancedForOcr(frontSlot.dataUrl).catch(() => frontSlot.dataUrl);
       scanStatus.textContent = 'Vorderseite wird erkannt …';
-      front = (await worker.recognize(frontSlot.dataUrl, { rotateAuto: true })).data.text;
+      front = (await worker.recognize(frontEnhanced, { rotateAuto: true })).data.text;
     }
     if (backSlot?.dataUrl) {
+      scanStatus.textContent = 'Rückseite wird vorbereitet …';
+      const backEnhanced = await enhancedForOcr(backSlot.dataUrl).catch(() => backSlot.dataUrl);
       scanStatus.textContent = 'Rückseite wird erkannt …';
-      back = (await worker.recognize(backSlot.dataUrl, { rotateAuto: true })).data.text;
+      back = (await worker.recognize(backEnhanced, { rotateAuto: true })).data.text;
     }
 
     const parse = (a, b) => IdParser.analyze(`${a}\n${frontSlot?.embeddedText || ''}`, `${b}\n${backSlot?.embeddedText || ''}`);
@@ -682,13 +731,27 @@ byId('recognize-button').addEventListener('click', async () => {
       applied++;
     }
 
+    if (slots.front) byId('front-frame')?.closest('.scan-card')?.classList.add('scan-card--recognized');
+    if (slots.back) byId('back-frame')?.closest('.scan-card')?.classList.add('scan-card--recognized');
+
     syncReviewGate();
     const raw = `${front ? `VORDERSEITE\n${front}\n\n` : ''}${back ? `RÜCKSEITE\n${back}` : ''}`.trim();
     byId('ocr-raw').textContent = raw;
     byId('ocr-details').hidden = !raw;
-    scanStatus.textContent = applied > 0
-      ? `${applied} Angaben automatisch ausgefüllt.`
+    const filledFieldLabels = {
+      first: 'Vorname', last: 'Nachname', birth: 'Geburtsdatum', birthplace: 'Geburtsort',
+      street: 'Straße', postal: 'PLZ', city: 'Ort', nationality: 'Staatsangeh.',
+      number: 'Dokumentnr.', expiry: 'Gültig bis'
+    };
+    const filledKeys = Object.entries(sellerFields)
+      .filter(([, field]) => field.dataset.ocrFilled === 'true')
+      .map(([key]) => filledFieldLabels[key] || key);
+    scanStatus.textContent = filledKeys.length > 0
+      ? `${filledKeys.length} Felder erkannt: ${filledKeys.join(' · ')}`
       : 'Ausweis gelesen. Bitte Angaben prüfen oder bei Bedarf ergänzen.';
+    if (applied > 0) {
+      setTimeout(() => byId('seller-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 450);
+    }
   } catch (error) {
     console.error('Texterkennung fehlgeschlagen:', error);
     scanStatus.textContent = error.message?.includes('während der Erkennung')

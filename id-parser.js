@@ -300,6 +300,17 @@
         result.city = result.city.replace(/\s+[A-ZÄÖÜẞ]{1,2}$/, '');
       }
     }
+    // Fallback: PLZ allein auf einer Zeile, Ort auf der nächsten
+    if (!result.postal) {
+      const plzIdx = lines.findIndex(line => /^(?:D-)?\d{5}$/.test(line.trim()));
+      if (plzIdx >= 0) {
+        result.postal = lines[plzIdx].trim().replace(/^D-/, '');
+        const nextLine = clean(lines[plzIdx + 1] || '');
+        if (nextLine && !/^\d/.test(nextLine) && !isLabel(nextLine) && !looksLikeMrz(nextLine)) {
+          result.city = nextLine.replace(/\s+[A-ZÄÖÜ]{1,2}$/, '');
+        }
+      }
+    }
     const streetLabel = lines.findIndex(line => labels.street.test(line));
     const streetCandidates = streetLabel >= 0 ? lines.slice(streetLabel + 1) : lines;
     result.street = streetCandidates.map(streetFromLine).find(Boolean) ||
@@ -310,6 +321,17 @@
       const top = lines.slice(0, Math.min(lines.length, 8)).join(' ');
       const number = top.match(/\b(?=[A-Z0-9]{9}\b)(?=[A-Z0-9]*\d)[A-Z0-9]{9}\b/);
       result.number ||= number?.[0] || '';
+      // Fallback: labeled document number anywhere in the text
+      if (!result.number) {
+        const numLabelIdx = lines.findIndex(l => /^(?:ausweis|dokument|serien|pass|kimlik|belge|seri).*(?:nummer|nr\.?|no\.?|number)/i.test(l));
+        if (numLabelIdx >= 0) {
+          for (let off = 1; off <= 2; off++) {
+            const candidate = clean(lines[numLabelIdx + off] || '').replace(/\s/g, '');
+            const m = candidate.match(/(?=[A-Z0-9]{9}$)(?=[A-Z0-9]*\d)[A-Z0-9]{9}/);
+            if (m) { result.number = m[0]; break; }
+          }
+        }
+      }
     }
     result.number = clean(result.number).replace(/\s/g, '').toUpperCase();
     return result;
