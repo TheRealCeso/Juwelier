@@ -1,11 +1,6 @@
 const byId = id => document.getElementById(id);
 const slots = { front: null, back: null };
-const scanConsent = byId('scan-consent');
-const dataVerified = byId('data-verified');
-const reviewAck = byId('review-ack');
 const scanStatus = byId('scan-status');
-const identityWarning = byId('identity-warning');
-const reviewWarning = byId('review-warning');
 const exportStatus = byId('export-status');
 const cameraDialog = byId('camera-dialog');
 const cameraVideo = byId('camera-video');
@@ -15,6 +10,7 @@ const cameraReviewStatus = byId('camera-review-status');
 const cameraRetake = byId('camera-retake');
 const signatureDialog = byId('signature-dialog');
 const signatureCanvas = byId('signature-canvas');
+const purchaseAgreement = byId('purchase-agreement');
 const signatureContext = signatureCanvas.getContext('2d');
 const archiveDialog = byId('archive-dialog');
 const previewDialog = byId('pdf-preview-dialog');
@@ -26,33 +22,15 @@ let cameraSide = null;
 let pendingCameraImage = null;
 let signatureDataUrl = null;
 let signatureHasInk = false;
+let agreementConfirmed = false;
 let drawing = false;
 let busy = false;
-let identityConflicts = [];
-let approvalRevision = 0;
-let verifiedRevision = null;
-let signedRevision = null;
 let previewUrl = null;
 let previewDocument = null;
 let previewRenderId = 0;
 let archiveBusy = false;
 const scanQuality = { front: null, back: null };
-let mrzStatus = null;
-let ocrFieldReview = [];
-let manualReviewRequired = false;
-
-const reviewFieldLabels = {
-  first: 'Vorname', last: 'Nachname', birth: 'Geburtsdatum',
-  number: 'Dokumentnummer', expiry: 'Gültigkeitsdatum'
-};
-
-const sellerFields = {
-  first: byId('seller-first'), last: byId('seller-last'), birth: byId('seller-birth'),
-  birthplace: byId('seller-birthplace'), street: byId('seller-street'),
-  postal: byId('seller-postal'), city: byId('seller-city'),
-  nationality: byId('seller-nationality'), number: byId('seller-id-number'),
-  expiry: byId('seller-expiry')
-};
+const sellerOtherInfo = byId('seller-other-info');
 
 function localDate() {
   const date = new Date();
@@ -89,7 +67,6 @@ function grams(value) {
 
 function setBusy(value) {
   busy = value;
-  byId('recognize-button').disabled = value;
   byId('export-button').disabled = value;
   byId('preview-button').disabled = value;
   byId('archive-save-button').disabled = value;
@@ -102,76 +79,64 @@ function invalidateApproval() {
     byId('receipt-number').textContent = receiptNumber;
     receiptIssued = false;
   }
-  approvalRevision++;
-  verifiedRevision = approvalRevision;
-  signedRevision = signatureDataUrl ? approvalRevision : null;
-  dataVerified.checked = true;
-  reviewAck.checked = true;
+  agreementConfirmed = false;
 }
 
 function updateCaptureAvailability() {
   document.querySelectorAll('.scan-action input, [data-camera]').forEach(control => { control.disabled = busy; });
   if (busy) return;
-  if (!slots.front && !slots.back) scanStatus.textContent = 'Ausweis erfassen und auf „Angaben erkennen“ klicken.';
-  else if (slots.front && slots.back) scanStatus.textContent = 'Beide Seiten sind bereit. Klicken Sie auf „Angaben erkennen“.';
-  else scanStatus.textContent = 'Dokumentseite erfasst. Klicken Sie auf „Angaben erkennen“ (oder weitere Seite erfassen).';
+  if (!slots.front && !slots.back) scanStatus.textContent = 'Vorder- und Rückseite erfassen. Beide Bilder werden in den Beleg übernommen.';
+  else if (!slots.front) scanStatus.textContent = 'Die Vorderseite fehlt noch.';
+  else if (!slots.back) scanStatus.textContent = 'Die Rückseite fehlt noch.';
+  else scanStatus.textContent = 'Vorder- und Rückseite sind erfasst und werden als Bilder angehängt.';
 }
 
-scanConsent.addEventListener('change', () => { invalidateApproval(); updateCaptureAvailability(); });
-dataVerified.addEventListener('change', () => { verifiedRevision = dataVerified.checked ? approvalRevision : null; });
-reviewAck.addEventListener('change', () => { if (!reviewAck.checked) invalidateApproval(); });
 byId('document-type').addEventListener('change', invalidateApproval);
-Object.values(sellerFields).forEach(field => {
-  const changed = () => {
-    field.dataset.userEdited = 'true';
-    field.dataset.ocrFilled = 'false';
-    field.dataset.ocrConfidence = 'manual';
-    invalidateApproval();
-  };
-  field.addEventListener('input', changed);
-  field.addEventListener('change', changed);
-});
+sellerOtherInfo.addEventListener('input', invalidateApproval);
 
 function renderScanQuality() {
   const result = byId('scan-quality-result');
-  if (result) result.hidden = true;
-}
-
-function syncReviewGate() {
-  manualReviewRequired = false;
-  reviewWarning.hidden = true;
-  reviewWarning.textContent = '';
-  byId('review-ack-wrap').hidden = true;
-  reviewAck.checked = true;
+  const list = byId('scan-quality-list');
+  if (!result || !list) return;
+  list.replaceChildren();
+  for (const side of ['front', 'back']) {
+    const label = side === 'front' ? 'Vorderseite' : 'Rückseite';
+    for (const issue of scanQuality[side]?.issues || []) {
+      const item = document.createElement('li');
+      item.textContent = `${label}: ${issue.message}`;
+      list.append(item);
+    }
+  }
+  const hasIssues = list.childElementCount > 0;
+  result.classList.toggle('has-warning', hasIssues);
+  result.hidden = !hasIssues;
 }
 
 async function analyzeSlotQuality(side, slot, source) {
   scanQuality[side] = { uncertain: false, issues: [] };
   renderScanQuality();
-  syncReviewGate();
+  try {
+    const quality = await window.ScanQuality?.analyzeDataUrl(slot.dataUrl);
+    if (!quality || slots[side] !== slot) return;
+    scanQuality[side] = quality;
+    renderScanQuality();
+  } catch (error) {
+    console.warn(`Bildqualität der ${side === 'front' ? 'Vorderseite' : 'Rückseite'} konnte nicht geprüft werden:`, error);
+  }
 }
 
-function setSlot(side, dataUrl, filename = 'Aufnahme', embeddedText = '', source = 'upload') {
-  slots[side] = { dataUrl, filename, embeddedText, source };
+function setSlot(side, dataUrl, filename = 'Aufnahme', source = 'upload') {
+  slots[side] = { dataUrl, filename, source };
   scanQuality[side] = { uncertain: false, issues: [] };
-  mrzStatus = null;
-  ocrFieldReview = [];
   renderScanQuality();
-  syncReviewGate();
-  dataVerified.disabled = false;
-  dataVerified.checked = true;
-  identityConflicts = [];
-  identityWarning.hidden = true;
-  identityWarning.textContent = '';
   setBusy(busy);
-  byId('ocr-details').hidden = true;
-  byId('ocr-raw').textContent = '';
   const preview = byId(`${side}-preview`);
   preview.src = dataUrl;
   preview.hidden = false;
   byId(`${side}-placeholder`).hidden = true;
   byId(`${side}-state`).textContent = 'Erfasst';
   updateCaptureAvailability();
+  void analyzeSlotQuality(side, slots[side], source);
 }
 
 async function loadImageSource(blob) {
@@ -251,7 +216,6 @@ async function pdfFileToImages(file) {
   const loading = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
   const pdf = await loading.promise;
   const images = [];
-  const texts = [];
   try {
     for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 2); pageNumber++) {
       const page = await pdf.getPage(pageNumber);
@@ -263,14 +227,12 @@ async function pdfFileToImages(file) {
       canvas.height = Math.round(viewport.height);
       await page.render({ canvasContext: canvas.getContext('2d'), canvas, viewport }).promise;
       images.push(canvas.toDataURL('image/jpeg', .91));
-      const textContent = await page.getTextContent();
-      texts.push(textContent.items.map(item => `${item.str}${item.hasEOL ? '\n' : ' '}`).join(''));
       page.cleanup();
     }
   } finally {
     await loading.destroy();
   }
-  return { images, texts };
+  return images;
 }
 
 async function handleFile(side, file, source = 'upload') {
@@ -284,17 +246,22 @@ async function handleFile(side, file, source = 'upload') {
   byId(`${side}-state`).textContent = 'Wird geladen …';
   byId(`${side}-frame`)?.closest('.scan-card')?.classList.add('scan-card--loading');
   scanStatus.textContent = `${fileName || 'Foto'} wird geladen …`;
+  let loaded = false;
   try {
     if (isPdf) {
-      const { images, texts } = await pdfFileToImages(file);
+      const images = await pdfFileToImages(file);
       if (!images.length) throw new Error('Dieses PDF hat keine lesbare Seite.');
-      setSlot(side, images[0], fileName, texts[0], 'pdf');
-      if (side === 'front' && images[1] && !slots.back) setSlot('back', images[1], `${fileName} · Seite 2`, texts[1], 'pdf');
+      if (images.length > 1) {
+        setSlot('front', images[0], fileName, 'pdf');
+        setSlot('back', images[1], fileName, 'pdf');
+      } else {
+        setSlot(side, images[0], fileName, 'pdf');
+      }
     } else {
       const dataUrl = await imageFileToDataUrl(file);
-      setSlot(side, dataUrl, fileName || 'Foto', '', source);
+      setSlot(side, dataUrl, fileName || 'Foto', source);
     }
-    scanStatus.textContent = 'Foto geladen! Klicken Sie auf „Angaben erkennen“.';
+    loaded = true;
   } catch (error) {
     console.error('Dokument konnte nicht gelesen werden:', error);
     byId(`${side}-state`).textContent = slots[side] ? 'Erfasst' : 'Noch nicht erfasst';
@@ -302,6 +269,9 @@ async function handleFile(side, file, source = 'upload') {
   } finally {
     byId(`${side}-frame`)?.closest('.scan-card')?.classList.remove('scan-card--loading');
     setBusy(false);
+    if (loaded) {
+      updateCaptureAvailability();
+    }
   }
 }
 
@@ -460,9 +430,9 @@ byId('camera-capture').addEventListener('click', async () => {
       console.warn('Standbild zu groß oder nicht lesbar, Videobild wird verwendet:', error);
       image = cameraFrameToDataUrl(cameraVideo, videoCrop);
     }
-    setSlot(side, image.dataUrl, 'Kameraaufnahme', '', 'camera');
+    setSlot(side, image.dataUrl, 'Kameraaufnahme', 'camera');
     stopCamera();
-    scanStatus.textContent = 'Foto übernommen! Klicken Sie auf „Angaben erkennen“.';
+    updateCaptureAvailability();
   } catch (error) {
     console.error('Kamerabild konnte nicht übernommen werden:', error);
     scanStatus.textContent = 'Aufnahme fehlgeschlagen. Bitte „Foto aufnehmen“ nutzen.';
@@ -472,296 +442,6 @@ byId('camera-capture').addEventListener('click', async () => {
   }
 });
 window.addEventListener('pagehide', stopCamera);
-
-async function enhancedForOcr(dataUrl) {
-  const image = new Image();
-  await new Promise(resolve => {
-    image.onload = resolve;
-    image.onerror = resolve;
-    image.src = dataUrl;
-  });
-  const w = image.naturalWidth || image.width;
-  const h = image.naturalHeight || image.height;
-  if (!w || !h) return dataUrl;
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  context.drawImage(image, 0, 0);
-  const pixels = context.getImageData(0, 0, w, h);
-  const data = pixels.data;
-  // Step 1: Greyscale
-  const grey = new Uint8Array(w * h);
-  for (let i = 0; i < data.length; i += 4) {
-    grey[i >> 2] = Math.round(.299 * data[i] + .587 * data[i + 1] + .114 * data[i + 2]);
-  }
-  // Step 2: Percentile contrast stretch (p2–p98)
-  const hist = new Int32Array(256);
-  for (const v of grey) hist[v]++;
-  const total = w * h;
-  let lo = 0, hi = 255, cumLo = 0, cumHi = 0;
-  for (let v = 0; v < 256; v++) { cumLo += hist[v]; if (cumLo >= total * 0.02) { lo = v; break; } }
-  for (let v = 255; v >= 0; v--) { cumHi += hist[v]; if (cumHi >= total * 0.02) { hi = v; break; } }
-  if (hi <= lo) { lo = 0; hi = 255; }
-  const range = hi - lo || 1;
-  const stretched = new Uint8Array(w * h);
-  for (let i = 0; i < grey.length; i++) {
-    stretched[i] = Math.max(0, Math.min(255, Math.round((grey[i] - lo) * 255 / range)));
-  }
-  // Step 3: Unsharp mask (3x3 Gaussian blur then add high-frequency detail back)
-  const blurred = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      let sum = 0, weight = 0;
-      for (let ky = -1; ky <= 1; ky++) {
-        for (let kx = -1; kx <= 1; kx++) {
-          const ny = Math.max(0, Math.min(h - 1, y + ky));
-          const nx = Math.max(0, Math.min(w - 1, x + kx));
-          const k = [1,2,1,2,4,2,1,2,1][(ky+1)*3+(kx+1)];
-          sum += stretched[ny * w + nx] * k;
-          weight += k;
-        }
-      }
-      blurred[y * w + x] = Math.round(sum / weight);
-    }
-  }
-  for (let i = 0; i < stretched.length; i++) {
-    const v = Math.max(0, Math.min(255, Math.round(stretched[i] + 0.7 * (stretched[i] - blurred[i]))));
-    const idx = i * 4;
-    data[idx] = data[idx + 1] = data[idx + 2] = v;
-    data[idx + 3] = 255;
-  }
-  context.putImageData(pixels, 0, 0);
-  return canvas.toDataURL('image/png');
-}
-
-async function cropForOcr(dataUrl, region, zoom = 3, threshold = false) {
-  const image = new Image();
-  image.src = dataUrl;
-  await image.decode();
-  const left = Math.round(image.naturalWidth * region[0]);
-  const top = Math.round(image.naturalHeight * region[1]);
-  const width = Math.round(image.naturalWidth * region[2]);
-  const height = Math.round(image.naturalHeight * region[3]);
-  const scale = Math.min(zoom, 2600 / width, 1800 / height);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(width * scale);
-  canvas.height = Math.round(height * scale);
-  const context = canvas.getContext('2d', { willReadFrequently: threshold });
-  context.imageSmoothingQuality = 'high';
-  context.drawImage(image, left, top, width, height, 0, 0, canvas.width, canvas.height);
-  if (threshold) {
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-    for (let index = 0; index < pixels.data.length; index += 4) {
-      const luminance = .299 * pixels.data[index] + .587 * pixels.data[index + 1] + .114 * pixels.data[index + 2];
-      const value = luminance < 157 ? 24 : 255;
-      pixels.data[index] = pixels.data[index + 1] = pixels.data[index + 2] = value;
-    }
-    context.putImageData(pixels, 0, 0);
-  }
-  return canvas.toDataURL('image/png');
-}
-
-async function centeredDocumentForOcr(dataUrl) {
-  const image = new Image();
-  image.src = dataUrl;
-  await image.decode();
-  const crop = ScanCapture.centeredDocumentCrop(image.naturalWidth, image.naturalHeight);
-  if (!crop) return null;
-  const scale = Math.min(1, 3200 / crop.width, 2400 / crop.height);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(crop.width * scale);
-  canvas.height = Math.round(crop.height * scale);
-  const context = canvas.getContext('2d');
-  if (!context) return null;
-  context.imageSmoothingQuality = 'high';
-  context.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', .96);
-}
-
-function recognitionScore(analysis) {
-  const required = ['first', 'last', 'birth', 'number', 'expiry', 'street', 'postal', 'city'];
-  const filled = required.filter(key => analysis.fields[key]).length;
-  const corroborated = required.filter(key => analysis.fieldStatus[key]?.confidence === 'high').length;
-  return (analysis.mrzStatus.state === 'valid' ? 30 : 0) + filled * 3 + corroborated * 2 - analysis.conflicts.length * 20;
-}
-
-function needsMoreRecognition(analysis) {
-  const required = ['first', 'last', 'birth', 'number', 'expiry', 'street', 'postal', 'city'];
-  return analysis.mrzStatus.state !== 'valid' || required.some(key => !analysis.fields[key]) ||
-    ['first', 'last', 'birth', 'number', 'expiry'].some(key => analysis.fieldStatus[key]?.confidence !== 'high');
-}
-
-async function recognizeDocumentZones(worker, frontDataUrl, backDataUrl, documentType, analysis) {
-  const psm = window.Tesseract.PSM || {};
-  const zones = { front: '', back: '' };
-  const read = async (dataUrl, region, zoom = 3, threshold = false) =>
-    (await worker.recognize(await cropForOcr(dataUrl, region, zoom, threshold), { rotateAuto: true })).data.text;
-
-  if (documentType === 'Personalausweis') {
-    await worker.setParameters({ tessedit_pageseg_mode: psm.SINGLE_BLOCK || '6', tessedit_char_whitelist: '', preserve_interword_spaces: '1' });
-    if (['first', 'last', 'birth', 'birthplace', 'expiry'].some(key => analysis.fieldStatus[key]?.confidence !== 'high')) {
-      scanStatus.textContent = 'Vorderseite wird gezielt gelesen …';
-      zones.front += `${await read(frontDataUrl, [.38, .14, .61, .74])}\n`;
-    }
-    if (['street', 'postal', 'city'].some(key => !analysis.fields[key])) {
-      scanStatus.textContent = 'Anschrift wird gezielt gelesen …';
-      zones.back += `${await read(backDataUrl, [.37, .01, .58, .34])}\n`;
-    }
-    if (analysis.fieldStatus.number?.confidence !== 'high') {
-      await worker.setParameters({ tessedit_pageseg_mode: psm.SINGLE_LINE || '7', tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' });
-      const numberText = (await read(frontDataUrl, [.66, .02, .33, .15], 4)).toUpperCase();
-      const number = numberText.match(/\b(?=[A-Z0-9]{9}\b)(?=[A-Z0-9]*\d)[A-Z0-9]{9}\b/)?.[0];
-      if (number) zones.front = `Dokumentnummer\n${number}\n${zones.front}`;
-    }
-  }
-
-  if (analysis.mrzStatus.state !== 'valid') {
-    scanStatus.textContent = 'Maschinenlesbare Zeilen werden geprüft …';
-    await worker.setParameters({ tessedit_pageseg_mode: psm.SINGLE_BLOCK || '6', tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<' });
-    const mrzSide = documentType === 'Reisepass' ? 'front' : 'back';
-    const dataUrl = mrzSide === 'front' ? frontDataUrl : backDataUrl;
-    const region = documentType === 'Reisepass' ? [.015, .68, .97, .31] : [.015, .66, .97, .32];
-    zones[mrzSide] += `\n${await read(dataUrl, region, 2.5)}`;
-    const firstPass = IdParser.inspectMrz(zones[mrzSide]);
-    if (firstPass.status.state !== 'valid') {
-      zones[mrzSide] += `\n${await read(dataUrl, region, 2.5, true)}`;
-    }
-  }
-  return zones;
-}
-
-byId('recognize-button').addEventListener('click', async () => {
-  if (busy) return;
-  if (!slots.front && !slots.back) {
-    scanStatus.textContent = 'Bitte mindestens eine Ausweisseite erfassen.';
-    return;
-  }
-  if (!window.Tesseract?.createWorker) {
-    scanStatus.textContent = 'Texterkennung ist nicht verfügbar. Bitte Angaben manuell eintragen.';
-    return;
-  }
-  setBusy(true);
-  scanStatus.textContent = 'Texterkennung wird vorbereitet …';
-  const frontSlot = slots.front;
-  const backSlot = slots.back;
-  const documentType = byId('document-type').value;
-  let worker;
-  try {
-    if (!window.IdParser?.extract) throw new Error('Parser nicht verfügbar');
-    const base = new URL('./assets/vendor/tesseract/', document.baseURI);
-    worker = await Tesseract.createWorker(['deu', 'eng'], 1, {
-      workerPath: new URL('worker.min.js', base).href,
-      corePath: new URL('core/', base).href,
-      langPath: new URL('lang', base).href,
-      gzip: false,
-      cacheMethod: 'none',
-      workerBlobURL: false,
-      logger: message => {
-        if (message.status === 'recognizing text') scanStatus.textContent = `Text wird erkannt: ${Math.round(message.progress * 100)} %`;
-      }
-    });
-
-    let front = '';
-    let back = '';
-    let frontOcrImage = frontSlot?.dataUrl;
-    let backOcrImage = backSlot?.dataUrl;
-
-    if (frontSlot?.dataUrl) {
-      scanStatus.textContent = 'Vorderseite wird vorbereitet …';
-      const frontEnhanced = await enhancedForOcr(frontSlot.dataUrl).catch(() => frontSlot.dataUrl);
-      scanStatus.textContent = 'Vorderseite wird erkannt …';
-      front = (await worker.recognize(frontEnhanced, { rotateAuto: true })).data.text;
-    }
-    if (backSlot?.dataUrl) {
-      scanStatus.textContent = 'Rückseite wird vorbereitet …';
-      const backEnhanced = await enhancedForOcr(backSlot.dataUrl).catch(() => backSlot.dataUrl);
-      scanStatus.textContent = 'Rückseite wird erkannt …';
-      back = (await worker.recognize(backEnhanced, { rotateAuto: true })).data.text;
-    }
-
-    const parse = (a, b) => IdParser.analyze(`${a}\n${frontSlot?.embeddedText || ''}`, `${b}\n${backSlot?.embeddedText || ''}`);
-    let analysis = parse(front, back);
-
-    if (documentType === 'Personalausweis' && (!analysis.fields.first || !analysis.fields.last || !analysis.fields.number)) {
-      for (const side of ['front', 'back']) {
-        const slot = side === 'front' ? frontSlot : backSlot;
-        if (!slot?.dataUrl || slot.source === 'camera' || slot.source === 'sample' || (slot.embeddedText && slot.embeddedText.trim().length > 20)) continue;
-        try {
-          const candidateImage = await centeredDocumentForOcr(slot.dataUrl);
-          if (!candidateImage) continue;
-          const candidateText = (await worker.recognize(candidateImage, { rotateAuto: true })).data.text;
-          if (candidateText.trim().length < 8) continue;
-          const candidateFront = side === 'front' ? `${candidateText}\n${front}` : front;
-          const candidateBack = side === 'back' ? `${candidateText}\n${back}` : back;
-          const candidateAnalysis = parse(candidateFront, candidateBack);
-          if (recognitionScore(candidateAnalysis) > recognitionScore(analysis)) {
-            front = candidateFront;
-            back = candidateBack;
-            analysis = candidateAnalysis;
-            if (side === 'front') frontOcrImage = candidateImage;
-            else backOcrImage = candidateImage;
-          }
-        } catch (error) {
-          console.warn('Zusätzlicher Ausschnitt nicht lesbar:', error);
-        }
-      }
-    }
-
-    if (slots.front !== frontSlot || slots.back !== backSlot || byId('document-type').value !== documentType) {
-      throw new Error('Dokument während der Erkennung geändert. Bitte die Erkennung erneut starten.');
-    }
-
-    invalidateApproval();
-    identityConflicts = [];
-    identityWarning.hidden = true;
-    identityWarning.textContent = '';
-    dataVerified.disabled = false;
-    dataVerified.checked = true;
-    verifiedRevision = approvalRevision;
-    mrzStatus = analysis.mrzStatus;
-    ocrFieldReview = [];
-
-    let applied = 0;
-    for (const [key, field] of Object.entries(sellerFields)) {
-      field.dataset.ocrConfidence = 'high';
-      if (!analysis.fields[key] || field.dataset.userEdited === 'true') continue;
-      field.value = analysis.fields[key];
-      field.dataset.ocrFilled = 'true';
-      applied++;
-    }
-
-    if (slots.front) byId('front-frame')?.closest('.scan-card')?.classList.add('scan-card--recognized');
-    if (slots.back) byId('back-frame')?.closest('.scan-card')?.classList.add('scan-card--recognized');
-
-    syncReviewGate();
-    const raw = `${front ? `VORDERSEITE\n${front}\n\n` : ''}${back ? `RÜCKSEITE\n${back}` : ''}`.trim();
-    byId('ocr-raw').textContent = raw;
-    byId('ocr-details').hidden = !raw;
-    const filledFieldLabels = {
-      first: 'Vorname', last: 'Nachname', birth: 'Geburtsdatum', birthplace: 'Geburtsort',
-      street: 'Straße', postal: 'PLZ', city: 'Ort', nationality: 'Staatsangeh.',
-      number: 'Dokumentnr.', expiry: 'Gültig bis'
-    };
-    const filledKeys = Object.entries(sellerFields)
-      .filter(([, field]) => field.dataset.ocrFilled === 'true')
-      .map(([key]) => filledFieldLabels[key] || key);
-    scanStatus.textContent = filledKeys.length > 0
-      ? `${filledKeys.length} Felder erkannt: ${filledKeys.join(' · ')}`
-      : 'Ausweis gelesen. Bitte Angaben prüfen oder bei Bedarf ergänzen.';
-    if (applied > 0) {
-      setTimeout(() => byId('seller-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 450);
-    }
-  } catch (error) {
-    console.error('Texterkennung fehlgeschlagen:', error);
-    scanStatus.textContent = error.message?.includes('während der Erkennung')
-      ? error.message
-      : 'Texterkennung fehlgeschlagen. Sie können die Angaben manuell eintragen.';
-  } finally {
-    if (worker) await worker.terminate();
-    setBusy(false);
-  }
-});
 
 let openPurchaseDropdown = null;
 let purchaseDropdownCount = 0;
@@ -949,6 +629,11 @@ function clearSignature() {
   signatureContext.lineJoin = 'round';
   signatureHasInk = false;
   byId('signature-status').textContent = '';
+  updateSignatureSaveState();
+}
+
+function updateSignatureSaveState() {
+  byId('signature-save').disabled = !signatureHasInk || !purchaseAgreement.checked;
 }
 
 function signaturePoint(event) {
@@ -965,6 +650,7 @@ signatureCanvas.addEventListener('pointerdown', event => {
   signatureContext.lineTo(point.x + .1, point.y + .1);
   signatureContext.stroke();
   signatureHasInk = true;
+  updateSignatureSaveState();
 });
 signatureCanvas.addEventListener('pointermove', event => {
   if (!drawing) return;
@@ -975,13 +661,20 @@ signatureCanvas.addEventListener('pointermove', event => {
 function endSignature() { drawing = false; }
 signatureCanvas.addEventListener('pointerup', endSignature);
 signatureCanvas.addEventListener('pointercancel', endSignature);
-byId('sign-button').addEventListener('click', () => { clearSignature(); signatureDialog.showModal(); });
+purchaseAgreement.addEventListener('change', updateSignatureSaveState);
+byId('sign-button').addEventListener('click', () => {
+  clearSignature();
+  purchaseAgreement.checked = false;
+  updateSignatureSaveState();
+  signatureDialog.showModal();
+});
 byId('signature-clear').addEventListener('click', clearSignature);
 byId('signature-close').addEventListener('click', () => signatureDialog.close());
 byId('signature-save').addEventListener('click', () => {
+  if (!purchaseAgreement.checked) { byId('signature-status').textContent = 'Bitte zuerst Ihr Einverständnis bestätigen.'; return; }
   if (!signatureHasInk) { byId('signature-status').textContent = 'Bitte zuerst im Feld unterschreiben.'; return; }
   signatureDataUrl = signatureCanvas.toDataURL('image/png');
-  signedRevision = approvalRevision;
+  agreementConfirmed = true;
   byId('signature-preview').innerHTML = '';
   const image = document.createElement('img');
   image.src = signatureDataUrl;
@@ -1032,18 +725,13 @@ function sampleDocument(side) {
 }
 
 byId('sample-button').addEventListener('click', () => {
-  setSlot('front', sampleDocument('front'), 'Muster Vorderseite', '', 'sample');
-  setSlot('back', sampleDocument('back'), 'Muster Rückseite', '', 'sample');
-  Object.entries({ first: 'Max', last: 'Mustermann', birth: '01.01.1990', birthplace: 'Augsburg', street: 'Musterstraße 1', postal: '86150', city: 'Augsburg', nationality: 'DEU', number: 'TEST123456', expiry: '01.01.2030' }).forEach(([key, value]) => {
-    sellerFields[key].value = value;
-    sellerFields[key].dataset.userEdited = 'false';
-    sellerFields[key].dataset.ocrFilled = 'false';
-    sellerFields[key].dataset.ocrConfidence = '';
-  });
+  setSlot('front', sampleDocument('front'), 'Muster Vorderseite', 'sample');
+  setSlot('back', sampleDocument('back'), 'Muster Rückseite', 'sample');
   invalidateApproval();
+  sellerOtherInfo.value = '';
   byId('items-body').innerHTML = '';
   addItem({ metal: 'Gold', grams: '12.50', price: '650.00', date: localDate() });
-  scanStatus.textContent = 'Beispieldaten geladen. Dokument prüfen und „Daten überprüft“ erst nach dem Abgleich bestätigen.';
+  scanStatus.textContent = 'Beispielbilder geladen. Vorder- und Rückseite werden dem Beleg als Bilder angehängt.';
   exportStatus.textContent = 'Bitte noch die Unterschrift erfassen.';
 });
 
@@ -1053,28 +741,20 @@ byId('logout-button').addEventListener('click', () => {
 });
 
 function collectAndValidate(requireSignature = true) {
-  if (!slots.front && !slots.back) {
+  if (!slots.front || !slots.back) {
     byId('scan-title').scrollIntoView({ behavior: 'smooth' });
-    throw new Error('Bitte mindestens eine Ausweisseite erfassen.');
-  }
-  for (const key of ['first', 'last']) {
-    if (sellerFields[key].value.trim()) continue;
-    sellerFields[key].focus();
-    throw new Error('Bitte mindestens Vorname und Nachname angeben.');
+    throw new Error('Bitte Vorder- und Rückseite erfassen.');
   }
   const items = getItems();
   if (!items.length || items.some(item => !['Gold', 'Silber'].includes(item.metal) || !Number.isFinite(item.grams) || item.grams <= 0 || !Number.isFinite(item.price) || item.price <= 0 || !validIsoDate(item.date))) {
     byId('items-title').scrollIntoView({ behavior: 'smooth' });
     throw new Error('Bitte Edelmetall, Gramm, Preis und Datum für jede Position ausfüllen.');
   }
-  if (requireSignature && !signatureDataUrl) {
+  if (requireSignature && (!signatureDataUrl || !agreementConfirmed)) {
     byId('sign-button').focus();
-    throw new Error('Bitte die Unterschrift des Verkäufers erfassen.');
+    throw new Error('Bitte Einverständnis bestätigen und unterschreiben.');
   }
-  dataVerified.checked = true;
-  verifiedRevision = approvalRevision;
-  signedRevision = signatureDataUrl ? approvalRevision : null;
-  return { receiptNumber, seller: Object.fromEntries(Object.entries(sellerFields).map(([key, field]) => [key, field.value.trim()])), items, documentType: byId('document-type').value };
+  return { receiptNumber, otherInfo: sellerOtherInfo.value.trim(), items, documentType: byId('document-type').value };
 }
 
 function fitText(font, text, maxWidth, size, minimum = 8) {
@@ -1092,14 +772,48 @@ function drawFitted(page, font, text, x, y, maxWidth, size, color) {
   page.drawText(fitted.value, { x, y, size: fitted.size, font, color });
 }
 
-function drawCopyPage(page, font, image, heading, top, pdfLib) {
-  const { rgb, degrees } = pdfLib;
-  page.drawText(heading, { x: 48, y: top, size: 12, font, color: rgb(.23, .22, .20) });
-  const box = { x: 48, y: top - 318, width: 499, height: 300 };
-  page.drawRectangle({ ...box, borderColor: rgb(.78, .75, .70), borderWidth: 1 });
-  const dims = image.scaleToFit(box.width - 20, box.height - 20);
-  page.drawImage(image, { x: box.x + (box.width - dims.width) / 2, y: box.y + (box.height - dims.height) / 2, width: dims.width, height: dims.height });
-  page.drawText('KOPIE · TESTVERSION', { x: 115, y: box.y + 118, size: 36, font, color: rgb(.61, .45, .27), rotate: degrees(20), opacity: .42 });
+function drawDetailRow(page, font, label, value, x, labelY, maxWidth, colors) {
+  page.drawText(label.toUpperCase(), { x, y: labelY, size: 6.5, font, color: colors.muted });
+  drawFitted(page, font, value || '—', x, labelY - 10, maxWidth, 8.5, colors.ink);
+}
+
+function drawInfoCard(page, font, x, title, details, colors) {
+  const y = 495;
+  const width = 245;
+  const height = 190;
+  page.drawRectangle({ x, y, width, height, color: colors.paper, borderColor: colors.line, borderWidth: .7 });
+  page.drawRectangle({ x, y: y + height - 27, width, height: 27, color: colors.cardHead });
+  page.drawText(title, { x: x + 12, y: y + height - 18, size: 8, font, color: colors.gold });
+  details.forEach(([label, value], index) => {
+    drawDetailRow(page, font, label, value, x + 12, 644 - index * 25, width - 24, colors);
+  });
+}
+
+function drawImagePairPage(page, font, frontImage, backImage, receiptNumber, pdfLib, colors) {
+  const { rgb } = pdfLib;
+  const width = page.getWidth();
+  const height = page.getHeight();
+  page.drawRectangle({ x: 0, y: 0, width, height, color: colors.paper });
+  page.drawRectangle({ x: 0, y: height - 118, width, height: 118, color: rgb(.10, .10, .10) });
+  page.drawText('JUWELIER GÖK · AUGSBURG', { x: 45, y: 808, size: 9, font, color: rgb(.79, .70, .55) });
+  page.drawText('Dokumentbilder', { x: 45, y: 775, size: 17, font, color: rgb(.97, .95, .91) });
+  const numberLabel = `BELEG NR. ${receiptNumber}`;
+  page.drawText(numberLabel, { x: width - 45 - font.widthOfTextAtSize(numberLabel, 8), y: 808, size: 8, font, color: rgb(.87, .84, .79) });
+  const pageLabel = 'SEITE 2 / 2';
+  page.drawText(pageLabel, { x: width - 45 - font.widthOfTextAtSize(pageLabel, 8), y: 775, size: 8, font, color: rgb(.87, .84, .79) });
+
+  const imageRows = [
+    { label: 'VORDERSEITE / DATENSEITE', image: frontImage, labelY: 695, box: { x: 45, y: 390, width: 505, height: 280 } },
+    { label: 'RÜCKSEITE', image: backImage, labelY: 370, box: { x: 45, y: 65, width: 505, height: 280 } }
+  ];
+  for (const row of imageRows) {
+    page.drawText(row.label, { x: 45, y: row.labelY, size: 8, font, color: colors.gold });
+    page.drawRectangle({ ...row.box, color: rgb(1, 1, 1), borderColor: colors.line, borderWidth: .8 });
+    const dims = row.image.scaleToFit(row.box.width - 28, row.box.height - 28);
+    page.drawImage(row.image, { x: row.box.x + (row.box.width - dims.width) / 2, y: row.box.y + (row.box.height - dims.height) / 2, width: dims.width, height: dims.height });
+  }
+  page.drawLine({ start: { x: 45, y: 42 }, end: { x: 550, y: 42 }, thickness: .6, color: colors.line });
+  page.drawText('Dokumentkopien · Vorder- und Rückseite', { x: 45, y: 22, size: 7, font, color: colors.muted });
 }
 
 async function createReceiptPdf(data) {
@@ -1119,91 +833,105 @@ async function createReceiptPdf(data) {
   const muted = rgb(.40, .38, .35);
   const gold = rgb(.64, .50, .29);
   const paper = rgb(.98, .97, .95);
+  const line = rgb(.78, .75, .70);
+  const cardHead = rgb(.93, .91, .87);
+  const colors = { ink, muted, gold, paper, line, cardHead };
   const width = page.getWidth();
   const height = page.getHeight();
   page.drawRectangle({ x: 0, y: 0, width, height, color: paper });
   page.drawRectangle({ x: 0, y: height - 140, width, height: 140, color: rgb(.10, .10, .10) });
   page.drawText('JUWELIER GÖK · AUGSBURG', { x: 45, y: height - 40, size: 10, font, color: rgb(.79, .70, .55) });
-  page.drawText('Ankaufbeleg', { x: 45, y: height - 84, size: 29, font, color: rgb(.97, .95, .91) });
-  page.drawText('TESTVERSION · KEIN ECHTER GESCHÄFTSBELEG', { x: 45, y: height - 114, size: 9, font, color: rgb(.83, .71, .52) });
-  page.drawText(`Datum: ${displayDate(localDate())}`, { x: 425, y: height - 41, size: 9, font, color: rgb(.87, .84, .79) });
-  page.drawText(`Nr. ${data.receiptNumber}`, { x: 425, y: height - 58, size: 7, font, color: rgb(.87, .84, .79) });
+  page.drawText('Ankaufbeleg', { x: 45, y: height - 82, size: 29, font, color: rgb(.97, .95, .91) });
+  page.drawText('TESTVERSION · KEIN ECHTER GESCHÄFTSBELEG', { x: 45, y: height - 113, size: 8, font, color: rgb(.83, .71, .52) });
+  const dateLabel = `DATUM · ${displayDate(localDate())}`;
+  const numberLabel = `BELEG NR. ${data.receiptNumber}`;
+  page.drawText(dateLabel, { x: width - 45 - font.widthOfTextAtSize(dateLabel, 8), y: height - 41, size: 8, font, color: rgb(.87, .84, .79) });
+  page.drawText(numberLabel, { x: width - 45 - font.widthOfTextAtSize(numberLabel, 8), y: height - 60, size: 8, font, color: rgb(.87, .84, .79) });
 
-  page.drawText('VERKÄUFER/IN', { x: 45, y: 674, size: 10, font, color: gold });
-  page.drawText('ANKÄUFER', { x: 320, y: 674, size: 10, font, color: gold });
-  const seller = data.seller;
-  const sellerLines = [
-    `${seller.first} ${seller.last}`,
-    seller.street,
-    `${seller.postal} ${seller.city}`,
-    `Geboren: ${seller.birth || '—'}${seller.birthplace ? ` · ${seller.birthplace}` : ''}`,
-    `Staatsangehörigkeit: ${seller.nationality || '—'}`,
-    `Dokument: ${data.documentType}`,
-    `Dokumentnummer: ${seller.number || '—'}`,
-    `Gültig bis: ${seller.expiry || '—'}`
+  const sellerDetails = [
+    ['DOKUMENTART', data.documentType],
+    ['DOKUMENTSEITEN', 'Vorder- und Rückseite'],
+    ['ERFASSUNG', 'Bildanlage'],
+    ['VERKÄUFERANGABEN', 'Siehe Dokumentkopien'],
+    ['ZUSATZHINWEISE', data.otherInfo ? 'Auf dem Beleg aufgeführt' : 'Keine'],
+    ['BILDANLAGE', '2 Dokumentseiten']
   ];
-  sellerLines.forEach((line, index) => drawFitted(page, font, line, 45, 650 - index * 19, 250, index === 0 ? 11 : 9, ink));
-  page.drawText('Dokumentangaben mit Original abgeglichen', { x: 45, y: 497, size: 8, font, color: gold });
-  ['Murat Gök · Juwelier Gök', 'Hermanstraße 11', '86150 Augsburg', 'info@juwelier-goek.de', '0821 314670'].forEach((line, index) => drawFitted(page, font, line, 320, 650 - index * 19, 225, index === 0 ? 11 : 9, ink));
-  page.drawLine({ start: { x: 45, y: 482 }, end: { x: 550, y: 482 }, thickness: .7, color: rgb(.76, .73, .68) });
-  page.drawText('ANKAUFPOSITIONEN', { x: 45, y: 461, size: 10, font, color: gold });
-  const columns = [{ x: 45, label: 'Nr.' }, { x: 84, label: 'Edelmetallart' }, { x: 280, label: 'Gramm' }, { x: 366, label: 'Preis' }, { x: 460, label: 'Datum' }];
-  columns.forEach(column => page.drawText(column.label, { x: column.x, y: 433, size: 9, font, color: muted }));
+  const buyerDetails = [
+    ['UNTERNEHMEN', 'Juwelier Gök'],
+    ['ANSPRECHPARTNER', 'Murat Gök'],
+    ['STRASSE / HAUSNUMMER', 'Hermanstraße 11'],
+    ['PLZ / ORT', '86150 Augsburg'],
+    ['E-MAIL', 'info@juwelier-goek.de'],
+    ['TELEFON', '0821 314670']
+  ];
+  drawInfoCard(page, font, 45, 'VERKÄUFER/IN', sellerDetails, colors);
+  drawInfoCard(page, font, 305, 'ANKÄUFER', buyerDetails, colors);
+  if (data.otherInfo) {
+    page.drawRectangle({ x: 45, y: 440, width: 505, height: 45, color: paper, borderColor: line, borderWidth: .7 });
+    page.drawText('SONSTIGE INFORMATION', { x: 56, y: 470, size: 6.5, font, color: gold });
+    page.drawText(data.otherInfo, { x: 56, y: 457, size: 8, font, color: ink, maxWidth: 483, lineHeight: 9 });
+  }
+  const tableTitleY = data.otherInfo ? 420 : 464;
+  page.drawText('ANKAUFPOSITIONEN', { x: 45, y: tableTitleY, size: 9, font, color: gold });
+  const headerY = tableTitleY - 24;
+  page.drawRectangle({ x: 45, y: headerY - 7, width: 505, height: 22, color: cardHead });
+  const columns = [{ x: 56, label: 'NR.' }, { x: 96, label: 'EDELMETALLART' }, { x: 315, label: 'GRAMM' }, { x: 390, label: 'PREIS' }, { x: 476, label: 'DATUM' }];
+  columns.forEach(column => page.drawText(column.label, { x: column.x, y: headerY, size: 7, font, color: muted }));
+  const firstRowY = headerY - 28;
+  const rowGap = 24;
   data.items.forEach((item, index) => {
-    const y = 401 - index * 34;
-    page.drawLine({ start: { x: 45, y: y - 11 }, end: { x: 550, y: y - 11 }, thickness: .4, color: rgb(.85, .83, .80) });
-    drawFitted(page, font, String(item.number).padStart(2, '0'), 45, y, 35, 9, ink);
-    drawFitted(page, font, item.metal, 84, y, 180, 9, ink);
-    drawFitted(page, font, grams(item.grams), 280, y, 78, 9, ink);
-    drawFitted(page, font, euro(item.price), 366, y, 88, 9, ink);
-    drawFitted(page, font, displayDate(item.date), 460, y, 86, 9, ink);
+    const y = firstRowY - index * rowGap;
+    if (index % 2 === 1) page.drawRectangle({ x: 45, y: y - 8, width: 505, height: rowGap, color: rgb(.95, .94, .91) });
+    drawFitted(page, font, String(item.number).padStart(2, '0'), 56, y, 28, 8, ink);
+    drawFitted(page, font, item.metal, 96, y, 195, 8, ink);
+    drawFitted(page, font, grams(item.grams), 315, y, 60, 8, ink);
+    drawFitted(page, font, euro(item.price), 390, y, 73, 8, ink);
+    drawFitted(page, font, displayDate(item.date), 476, y, 74, 8, ink);
+    page.drawLine({ start: { x: 45, y: y - 10 }, end: { x: 550, y: y - 10 }, thickness: .35, color: line });
   });
   const totalGrams = data.items.reduce((sum, item) => sum + item.grams, 0);
   const totalPrice = data.items.reduce((sum, item) => sum + item.price, 0);
-  page.drawRectangle({ x: 45, y: 185, width: 505, height: 52, color: rgb(.91, .88, .82) });
-  page.drawText(`Gesamtgewicht  ${grams(totalGrams)}`, { x: 60, y: 205, size: 10, font, color: ink });
-  drawFitted(page, font, `Gesamtpreis  ${euro(totalPrice)}`, 326, 205, 209, 11, ink);
-  if (signatureDataUrl) {
+  const lastRowY = firstRowY - (data.items.length - 1) * rowGap;
+  const totalY = lastRowY - 58;
+  page.drawRectangle({ x: 45, y: totalY, width: 505, height: 42, color: rgb(.91, .88, .82) });
+  page.drawText('GESAMTGEWICHT', { x: 58, y: totalY + 25, size: 6.5, font, color: muted });
+  page.drawText(grams(totalGrams), { x: 58, y: totalY + 10, size: 10, font, color: ink });
+  page.drawText('GESAMTPREIS', { x: 320, y: totalY + 25, size: 6.5, font, color: muted });
+  drawFitted(page, font, euro(totalPrice), 320, totalY + 10, 215, 11, ink);
+  const signatureTop = Math.min(222, totalY - 18);
+  const signatureY = signatureTop - 88;
+  const signatureCards = [{ x: 45, title: 'UNTERSCHRIFT VERKÄUFER/IN' }, { x: 305, title: 'BESTÄTIGUNG' }];
+  signatureCards.forEach(card => {
+    page.drawRectangle({ x: card.x, y: signatureY, width: 245, height: 88, color: paper, borderColor: line, borderWidth: .7 });
+    page.drawRectangle({ x: card.x, y: signatureY + 63, width: 245, height: 25, color: cardHead });
+    page.drawText(card.title, { x: card.x + 11, y: signatureY + 72, size: 7, font, color: gold });
+  });
+  if (signatureDataUrl && agreementConfirmed) {
     const signature = await pdf.embedPng(signatureDataUrl);
-    const signatureSize = signature.scaleToFit(245, 80);
-    page.drawImage(signature, { x: 45, y: 68, width: signatureSize.width, height: signatureSize.height });
+    const signatureSize = signature.scaleToFit(215, 42);
+    page.drawImage(signature, { x: 60, y: signatureY + 17, width: signatureSize.width, height: signatureSize.height });
   } else {
-    page.drawText('(Unterschrift ausstehend)', { x: 45, y: 78, size: 8, font, color: muted });
+    page.drawText('Unterschrift ausstehend', { x: 58, y: signatureY + 31, size: 8, font, color: muted });
   }
-  page.drawLine({ start: { x: 45, y: 64 }, end: { x: 290, y: 64 }, thickness: .7, color: ink });
-  page.drawText('Ausweiskopien siehe Folgeseite.', { x: 320, y: 88, size: 9, font, color: muted });
-  page.drawText('Nur für Testdaten · Kein echter Geschäftsbeleg.', { x: 45, y: 29, size: 8, font, color: muted });
+  page.drawText(agreementConfirmed ? 'Angaben und Ankaufspreis bestätigt.' : 'Einverständnis ausstehend.', { x: 316, y: signatureY + 43, size: 8, font, color: agreementConfirmed ? ink : muted, maxWidth: 220, lineHeight: 10 });
+  page.drawText('Vorder- und Rückseite auf Seite 2.', { x: 316, y: signatureY + 22, size: 7, font, color: muted });
+  page.drawText('Achtung: Dem Verkauf liegen unsere allgemeinen Geschäftsbedingungen zugrunde. Der Verkäufer bestätigt den Verkauf zum angegebenen Verkaufspreis und den Erhalt des Geldes, bestätigt, dass die Ware sein Eigentum ist, und stellt unsere Firma von allen erhobenen Ansprüchen Dritter frei. Der Ankauf erfolgt unter Vorbehalt der Echtheit und Richtigkeit eventuell oben angegebener Eigenschaften.', { x: 45, y: 47, size: 6.5, font, color: muted, maxWidth: 505, lineHeight: 8 });
+  page.drawText('Nur für Testdaten · Kein echter Geschäftsbeleg.', { x: 45, y: 16, size: 6.5, font, color: muted });
 
   const copyPage = pdf.addPage([595.28, 841.89]);
-  copyPage.drawRectangle({ x: 0, y: 0, width, height, color: paper });
-  copyPage.drawRectangle({ x: 0, y: 754, width, height: 88, color: rgb(.10, .10, .10) });
-  copyPage.drawText('AUSWEISKOPIEN · TESTVERSION', { x: 45, y: 802, size: 12, font, color: rgb(.82, .72, .56) });
-  copyPage.drawText(`${seller.first} ${seller.last}`, { x: 45, y: 778, size: 10, font, color: rgb(.96, .94, .91) });
-  if (slots.front && slots.back) {
-    drawCopyPage(copyPage, font, await pdf.embedJpg(slots.front.dataUrl), 'Vorderseite / Datenseite', 728, lib);
-    drawCopyPage(copyPage, font, await pdf.embedJpg(slots.back.dataUrl), 'Rückseite / weitere Seite', 380, lib);
-  } else if (slots.front) {
-    drawCopyPage(copyPage, font, await pdf.embedJpg(slots.front.dataUrl), 'Ausweiskopie (Vorderseite / Datenseite)', 728, lib);
-  } else if (slots.back) {
-    drawCopyPage(copyPage, font, await pdf.embedJpg(slots.back.dataUrl), 'Ausweiskopie (Rückseite)', 728, lib);
-  }
-  copyPage.drawText('KOPIE · Beleganlage · Nicht für die echte Aufbewahrung vorgesehen.', { x: 48, y: 20, size: 8, font, color: muted });
+  const frontImage = await pdf.embedJpg(slots.front.dataUrl);
+  const backImage = await pdf.embedJpg(slots.back.dataUrl);
+  drawImagePairPage(copyPage, font, frontImage, backImage, data.receiptNumber, lib, colors);
   return pdf.save();
-}
-
-function assertApprovalRevision(revision) {
-  // Silent check without blocking on reviewAck or verifiedRevision
 }
 
 async function createValidatedPdf(requireSignature = true) {
   if (busy) throw new Error('Bitte warten, bis der aktuelle Vorgang abgeschlossen ist.');
   const data = collectAndValidate(requireSignature);
-  const revision = approvalRevision;
   setBusy(true);
   exportStatus.textContent = 'PDF wird erstellt …';
   try {
     const bytes = await createReceiptPdf(data);
-    assertApprovalRevision(revision);
     return { bytes, data };
   } finally {
     setBusy(false);
@@ -1330,7 +1058,7 @@ async function openArchiveForSave() {
 async function saveCurrentToArchive() {
   const { bytes, data } = await createValidatedPdf();
   const metadata = {
-    sellerName: `${data.seller.first} ${data.seller.last}`,
+    sellerName: 'Ankaufbeleg',
     createdAt: new Date().toISOString(),
     totalPrice: data.items.reduce((sum, item) => sum + item.price, 0),
     documentType: data.documentType
